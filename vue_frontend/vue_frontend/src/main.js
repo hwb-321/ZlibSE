@@ -3,7 +3,16 @@ import App from './App.vue';
 import router from './router';
 import { getCookie, getCoverUrl } from '@/utils/utils';
 import axios from 'axios';
+import 'vuetify/styles'
+import { createVuetify } from 'vuetify'
+import * as components from 'vuetify/components'
+import * as directives from 'vuetify/directives'
+import '@mdi/font/css/materialdesignicons.css'
 
+const vuetify = createVuetify({
+    components,
+    directives,
+})
 // 创建一个新的 Axios 实例，专门用于获取 CSRF 令牌
 const axiosInstance = axios.create();
 
@@ -26,4 +35,4 @@ const app = createApp(App);
 app.config.globalProperties.$getCookie = getCookie;
 app.config.globalProperties.$getCoverUrl = getCoverUrl;
 
-app.use(router).mount('#app');
+app.use(router).use(vuetify).mount('#app');

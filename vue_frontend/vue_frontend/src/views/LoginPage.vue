@@ -1,19 +1,35 @@
 <template>
-    <div class="login-container">
-        <h2>Login</h2>
-        <form @submit.prevent="submitLogin">
-            <div>
-                <label for="username">Username:</label>
-                <input id="username" v-model="username" type="text" required>
-            </div>
-            <div>
-                <label for="password">Password:</label>
-                <input id="password" v-model="password" type="password" required>
-            </div>
-            <button type="submit">Login</button>
-        </form>
-        <div v-if="errorMessage">{{ errorMessage }}</div>
-    </div>
+    <v-container class="fill-height" fluid>
+        <v-row align="center" justify="center">
+            <v-col cols="12" sm="8" md="4">
+                <v-card class="elevation-12">
+                    <v-toolbar color="primary" dark flat>
+                        <v-toolbar-title>登录</v-toolbar-title>
+                    </v-toolbar>
+                    <v-card-text>
+                        <v-text-field label="用户名" prepend-icon="mdi-account" type="text" v-model="username"
+                            required></v-text-field>
+                        <v-text-field label="密码" prepend-icon="mdi-lock" type="password" v-model="password"
+                            required></v-text-field>
+                    </v-card-text>
+                    <v-card-actions>
+                        <v-spacer></v-spacer>
+                        <v-btn color="primary" @click="submitLogin">登录</v-btn>
+                    </v-card-actions>
+                    <v-card-actions>
+                        <v-spacer></v-spacer>
+                        <!-- 使用 @click.middle 捕获鼠标中键事件 -->
+                        <v-btn color="green" @click="openRegisterPage" @click.middle.prevent="openRegisterPageInNewTab">注册
+                            <v-icon icon="mdi-open-in-new" right></v-icon>
+                        </v-btn>
+                    </v-card-actions>
+                    <v-alert type="error" v-if="errorMessage" class="mt-4">
+                        {{ errorMessage }}
+                    </v-alert>
+                </v-card>
+            </v-col>
+        </v-row>
+    </v-container>
 </template>
   
 <script>
@@ -51,13 +67,24 @@ export default {
                 this.errorMessage = 'Login failed. Please try again.';
             }
         },
-    }
+        openRegisterPage() {
+            this.$router.push({ name: 'RegisterPage' });
+        },
+        openRegisterPageInNewTab() {
+            const routeData = this.$router.resolve({ name: 'RegisterPage' });
+            window.open(routeData.href, '_blank');
+        },
+    },
+    mounted() {
+        this.$nextTick(() => {
+            document.title = '登录';
+        });
+    },
 };
 </script>
-  
+
 <style scoped>
-.login-container {
-    margin: 2px;
+.v-btn {
+    font-size: 17px;
 }
 </style>
-  

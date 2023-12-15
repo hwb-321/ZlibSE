@@ -1,3 +1,4 @@
+from django.contrib.auth.hashers import make_password
 from django.contrib.auth.models import User
 from django.contrib.auth import authenticate, login, logout
 from django.core.exceptions import ObjectDoesNotExist
@@ -7,6 +8,7 @@ from django.middleware.csrf import get_token
 from django.shortcuts import get_object_or_404
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
+import json
 
 from book.models import Book
 from user.models import UserCollectedBook, UploadedBook
@@ -41,15 +43,21 @@ def logout_user(request):
 
 def register_user(request):
     if request.method == 'POST':
-        username = request.POST.get('username')
-        password = request.POST.get('password')
-        if not User.objects.filter(username=username).exists():
-            User.objects.create_user(username=username, password=password)
-            return JsonResponse({'success': True})
-        else:
-            return JsonResponse({'success': False, 'error': 'Username already exists'})
-    else:
-        return JsonResponse({'success': False, 'error': 'Invalid request'})
+        try:
+            data = json.loads(request.body)
+            if User.objects.filter(username=data['username']).exists():
+                return JsonResponse({'success': False, 'message': '用户名已存在'})
+
+            user = User.objects.create(
+                username=data['username'],
+                email=data['email'],
+                password=make_password(data['password'])
+            )
+            user.save()
+            return JsonResponse({'success': True, 'message': '注册成功'})
+        except Exception as e:
+            return JsonResponse({'success': False, 'message': str(e)})
+    return JsonResponse({'success': False, 'message': '只支持 POST 请求'})
 
 
 @csrf_exempt

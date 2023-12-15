@@ -9,6 +9,7 @@ import BookDetailPage from '@/views/BookDetailPage.vue'
 import FavoritesPage from '@/views/FavoritesPage.vue';
 import UploadedBookManagementPage from '@/views/UploadedBookManagementPage.vue';
 import PersonalCenterPage from '@/views/PersonalCenterPage.vue';
+import RegisterPage from '@/views/RegisterPage';
 
 // 定义路由
 // 每个路由都需要映射到一个组件
@@ -49,6 +50,11 @@ const routes = [
         name: 'PersonalCenterPage',
         component: PersonalCenterPage
     },
+    {
+        path: '/register',
+        name: 'RegisterPage',
+        component: RegisterPage
+    },
 ];
 
 const router = createRouter({
@@ -69,7 +75,7 @@ router.beforeEach(async (to, from, next) => {
             }
         } else {
             // 如果用户未登录，则强制跳转到登录页面
-            if (to.name !== 'LoginPage') {
+            if (to.name !== 'LoginPage' && to.name != 'RegisterPage') {
                 next({ name: 'LoginPage' });
             } else {
                 next();
