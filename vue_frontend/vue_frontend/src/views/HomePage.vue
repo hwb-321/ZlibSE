@@ -1,5 +1,8 @@
 <template>
   <div class="home-container">
+    <div class="personal-center-link">
+      <router-link to="/personal-center">个人中心</router-link>
+    </div>
     <h1>书籍总数: {{ bookCount }}</h1>
 
     <!-- 搜索框和搜索按钮 -->
@@ -35,7 +38,7 @@ export default {
   methods: {
     async logout() {
       try {
-        const response = await axios.post(`${process.env.VUE_APP_BACKEND_URL}/user/logout_user/`, { withCredentials: true });
+        const response = await axios.post(`${process.env.VUE_APP_BACKEND_URL}/user/logout_user/`, {}, { withCredentials: true });
         if (response.data.success) {
           this.$router.push('/');
         } else {
@@ -91,6 +94,12 @@ export default {
 <style scoped>
 .home-container {
   margin: 20px;
+}
+
+.personal-center-link {
+  position: absolute;
+  right: 20px;
+  top: 20px;
 }
 
 .search-container {

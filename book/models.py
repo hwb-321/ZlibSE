@@ -23,10 +23,9 @@ class Book(models.Model):
     year = models.IntegerField()  # 出版年份
     language = models.CharField(max_length=50)  # 语言
     file_type = models.CharField(max_length=50)  # 文件类型
-    file_path = models.FileField(upload_to=get_file_path, blank=True, null=True)
-    file_size = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)  # 记录文件大小
-    cover_image_path = models.ImageField(upload_to=get_cover_image_path, blank=True, null=True)
+    file_path = models.FileField(upload_to=get_file_path)  # 文件路径
+    file_size = models.DecimalField(max_digits=10, decimal_places=2)  # 文件大小
+    cover_image_path = models.ImageField(upload_to=get_cover_image_path)  # 封面图片路径
 
-
-def __str__(self):
-    return self.title
+    def __str__(self):
+        return self.title

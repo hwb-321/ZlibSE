@@ -6,6 +6,9 @@ import HomePage from '../views/HomePage.vue';
 import LoginPage from '../views/LoginPage.vue';
 import UploadBookPage from '../views/UploadBookPage.vue';
 import BookDetailPage from '@/views/BookDetailPage.vue'
+import FavoritesPage from '@/views/FavoritesPage.vue';
+import UploadedBookManagementPage from '@/views/UploadedBookManagementPage.vue';
+import PersonalCenterPage from '@/views/PersonalCenterPage.vue';
 
 // 定义路由
 // 每个路由都需要映射到一个组件
@@ -30,7 +33,22 @@ const routes = [
         name: 'BookDetail',
         component: BookDetailPage,
         props: true
-    }
+    },
+    {
+        path: '/favorites',
+        name: 'FavoritesPage',
+        component: FavoritesPage
+    },
+    {
+        path: '/uploaded-book-management',
+        name: 'UploadedBookManagementPage',
+        component: UploadedBookManagementPage
+    },
+    {
+        path: '/personal-center',
+        name: 'PersonalCenterPage',
+        component: PersonalCenterPage
+    },
 ];
 
 const router = createRouter({

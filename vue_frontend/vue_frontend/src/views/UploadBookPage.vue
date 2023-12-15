@@ -59,6 +59,13 @@ export default {
             message: ''
         };
     },
+    computed: {
+        isFormValid() {
+            return this.book.title && this.book.author && this.book.isbn &&
+                this.book.category && this.book.year && this.book.language &&
+                this.file_path && this.cover_image_path;
+        }
+    },
     methods: {
         handleFileChange(event) {
             this.file_path = event.target.files[0];
@@ -67,6 +74,11 @@ export default {
             this.cover_image_path = event.target.files[0];
         },
         async submitBook() {
+            if (!this.isFormValid) {
+                this.message = '请填写所有字段';
+                return;
+            }
+
             try {
                 const formData = new FormData();
                 Object.keys(this.book).forEach(key => {
@@ -85,11 +97,17 @@ export default {
                     },
                     withCredentials: true
                 });
-                this.message = '上传成功';
+                this.showMessage('上传成功');
             } catch (error) {
                 console.error('Upload error:', error);
-                this.message = '上传失败，请重试。';
+                this.showMessage('上传失败，请重试。');
             }
+        },
+        showMessage(msg) {
+            this.message = msg;
+            setTimeout(() => {
+                this.message = '';
+            }, 2000); // 2秒后消息消失
         },
     }
 };

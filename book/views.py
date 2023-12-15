@@ -5,6 +5,7 @@ from django.db.models import Q
 from django.http import FileResponse, Http404, JsonResponse
 from django.utils.text import slugify
 
+from user.models import UploadedBook
 from .forms import BookForm
 from .models import Book
 
@@ -45,6 +46,10 @@ def upload_book(request):
                 # 计算文件大小并转换为MB
                 book.file_size = file.size / (1024 * 1024)
             book.save()
+
+            # 记录上传信息
+            UploadedBook.objects.create(user=request.user, book=book)
+
             return JsonResponse({'success': True, 'message': '上传成功'})
         else:
             return JsonResponse({'success': False, 'message': '上传失败', 'errors': form.errors})

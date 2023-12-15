@@ -15,6 +15,7 @@
                 <span>文件大小: {{ formattedFileSize }}</span>
             </div>
             <button @click="downloadBook">下载</button>
+            <button @click="toggleFavorite">{{ isFavorited ? '取消收藏' : '收藏' }}</button>
         </div>
     </div>
 </template>
@@ -41,6 +42,7 @@ export default {
             file_path: '',
             coverImage: '',
             file_size: null,
+            isFavorited: false,
         };
     },
     computed: {
@@ -78,7 +80,8 @@ export default {
                 this.file_size = bookData.file_size;
                 this.coverImage = this.$getCoverUrl(this.$route.params.id);
 
-                console.log(bookData);
+                const favoriteResponse = await axios.get(`${process.env.VUE_APP_BACKEND_URL}/user/check_favorite/${this.$route.params.id}`, { withCredentials: true });
+                this.isFavorited = favoriteResponse.data.isFavorited;
             } catch (error) {
                 console.error('Error fetching book details:', error);
             }
@@ -86,7 +89,46 @@ export default {
         downloadBook() {
             const downloadUrl = `${process.env.VUE_APP_BACKEND_URL}/book/download/${this.$route.params.id}`;
             window.location.href = downloadUrl;
-        }
+        },
+        async addToFavorites() {
+            try {
+                const response = await axios.post(`${process.env.VUE_APP_BACKEND_URL}/user/add_to_favorites/${this.$route.params.id}`, {}, {
+                    withCredentials: true
+                });
+
+                if (response.data.success) {
+                    // 处理收藏成功的情况
+                    alert('书籍收藏成功！');
+                } else {
+                    // 处理收藏失败的情况
+                    alert(response.data.message);
+                }
+            } catch (error) {
+                console.error('Error adding book to favorites:', error);
+                alert('收藏书籍时发生错误');
+            }
+        },
+        async toggleFavorite() {
+            try {
+                let response;
+                if (this.isFavorited) {
+                    // 如果当前已收藏，发送取消收藏的请求
+                    response = await axios.post(`${process.env.VUE_APP_BACKEND_URL}/user/remove_from_favorites/${this.$route.params.id}`, {}, { withCredentials: true });
+                } else {
+                    // 如果当前未收藏，发送添加收藏的请求
+                    response = await axios.post(`${process.env.VUE_APP_BACKEND_URL}/user/add_to_favorites/${this.$route.params.id}`, {}, { withCredentials: true });
+                }
+
+                if (response.data.success) {
+                    this.isFavorited = !this.isFavorited; // 切换收藏状态
+                } else {
+                    alert(response.data.message);
+                }
+            } catch (error) {
+                console.error('Error toggling favorite status:', error);
+                alert('操作失败');
+            }
+        },
     }
 };
 </script>
