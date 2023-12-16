@@ -1,9 +1,15 @@
 <template>
-    <div class="book-card-with-delete">
-        <BookCard :book="book" />
-        <button @click="deleteBook(book.id)" class="delete-btn">删除</button>
-    </div>
+    <v-card class="book-card-with-delete">
+        <v-card-text>
+            <BookCard :book="book" />
+        </v-card-text>
+        <v-card-actions class="delete-button-container">
+            <v-btn color="error" variant="outlined" class="delete-btn" @click="deleteBook(book.id)">删除</v-btn>
+        </v-card-actions>
+    </v-card>
 </template>
+  
+  
   
 <script>
 import BookCard from './BookCard.vue'; // 假设 BookCard 在同一目录下\
@@ -37,12 +43,16 @@ export default {
 <style scoped>
 .book-card-with-delete {
     display: flex;
-    align-items: center;
+    flex-direction: column;
+}
+
+.delete-button-container {
+    display: flex;
+    justify-content: center;
 }
 
 .delete-btn {
-    margin-left: 10px;
-    /* 按钮样式，可根据需要调整 */
+    font-size: 17px;
+    /* 设置字体大小为 17px */
 }
 </style>
-  

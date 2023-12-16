@@ -1,24 +1,36 @@
 <template>
-    <div class="uploaded-book-management">
-        <div class="header">
-            <h1>我上传的书籍管理</h1>
-            <!-- 添加 router-link 按钮 -->
-            <router-link to="/upload-book" class="upload-book-button">上传书籍</router-link>
-        </div>
+    <v-container>
+        <v-row align="center" class="mb-3">
+            <v-col cols="12" md="8" class="text-md-left text-center">
+                <h1>上传书籍管理</h1>
+            </v-col>
+            <v-col cols="12" md="4" class="text-md-right text-center">
+                <router-link to="/upload-book" class="mr-2">
+                    <v-btn color="primary">上传书籍</v-btn>
+                </router-link>
+                <router-link to="/personal-center">
+                    <v-btn color="primary">返回个人中心</v-btn>
+                </router-link>
+            </v-col>
+        </v-row>
 
-        <!-- 搜索框和搜索按钮 -->
-        <div class="search-container">
-            <input v-model="searchQuery" @keyup.enter="searchUploadedBooks" placeholder="搜索上传的书籍...">
-            <button @click="searchUploadedBooks">搜索</button>
-        </div>
+        <!-- 搜索框 -->
+        <v-row justify="center">
+            <v-col cols="12" md="8">
+                <v-text-field v-model="searchQuery" @keyup.enter="searchUploadedBooks" placeholder="搜索上传的书籍..."
+                    append-icon="mdi-magnify" @click:append="searchUploadedBooks" solo></v-text-field>
+            </v-col>
+        </v-row>
 
         <!-- 书籍列表 -->
-        <BookCardWithDelete v-for="book in uploadedBooks" :key="book.id" :book="book" @bookDeleted="handleBookDeleted" />
-
-        <!-- 返回主界面按钮 -->
-        <button @click="goToHome">返回主界面</button>
-    </div>
+        <v-row>
+            <v-col cols="12" sm="6" md="4" v-for="book in uploadedBooks" :key="book.id">
+                <BookCardWithDelete :book="book" @bookDeleted="handleBookDeleted" />
+            </v-col>
+        </v-row>
+    </v-container>
 </template>
+  
   
 <script>
 import axios from 'axios';
@@ -35,9 +47,14 @@ export default {
             searchQuery: ''
         };
     },
+    mounted() {
+        this.$nextTick(() => {
+            document.title = '上传书籍管理';
+        });
+    },
     methods: {
-        goToHome() {
-            this.$router.push('/home');
+        goToPersonalCenter() {
+            this.$router.push('/personal-center');
         },
         async fetchUploadedBooks() {
             try {

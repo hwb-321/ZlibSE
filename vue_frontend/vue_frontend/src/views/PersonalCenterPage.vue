@@ -1,16 +1,31 @@
 <template>
     <div class="personal-center">
-        <h1>个人中心</h1>
+        <v-row class="mb-3">
+            <v-col cols="12" md="8" class="d-flex justify-start align-center">
+                <h1>个人中心</h1>
+            </v-col>
+            <v-col cols="12" md="4" class="d-flex justify-end align-center">
+                <router-link to="/home">
+                    <v-btn color="secondary">返回主界面</v-btn>
+                </router-link>
+            </v-col>
+        </v-row>
 
-        <!-- 使用 router-link 直接创建链接 -->
         <router-link to="/uploaded-book-management" class="nav-link">我的上传</router-link>
         <router-link to="/favorites" class="nav-link">收藏夹</router-link>
+        <router-link to="/change-password" class="nav-link">修改密码</router-link>
     </div>
 </template>
   
+  
 <script>
 export default {
-    name: 'PersonalCenterPage'
+    name: 'PersonalCenterPage',
+    mounted() {
+        this.$nextTick(() => {
+            document.title = '个人中心';
+        });
+    },
 };
 </script>
   
@@ -30,4 +45,3 @@ export default {
     text-decoration: none;
 }
 </style>
-  

@@ -11,6 +11,18 @@
                             required></v-text-field>
                         <v-text-field label="密码" prepend-icon="mdi-lock" type="password" v-model="password"
                             required></v-text-field>
+                        <v-row no-gutters>
+                            <v-col cols="9">
+                                <v-text-field label="验证码" prepend-icon="mdi-shield-key" type="text" v-model="captchaValue"
+                                    required></v-text-field>
+                            </v-col>
+                            <v-col cols="3">
+                                <div class="captcha-container">
+                                    <img :src="captchaImageUrl" @click="refreshCaptcha" />
+                                </div>
+                            </v-col>
+                        </v-row>
+
                     </v-card-text>
                     <v-card-actions>
                         <v-spacer></v-spacer>
@@ -40,13 +52,19 @@ export default {
         return {
             username: '',
             password: '',
-            errorMessage: ''
+            errorMessage: '',
+            captchaKey: '',
+            captchaValue: '',
+            captchaImageUrl: '',
         };
     },
     methods: {
         async submitLogin() {
             try {
                 const formData = new URLSearchParams();
+                formData.append('captcha_key', this.captchaKey);
+                formData.append('captcha_value', this.captchaValue);
+
                 formData.append('username', this.username);
                 formData.append('password', this.password);
 
@@ -67,6 +85,15 @@ export default {
                 this.errorMessage = 'Login failed. Please try again.';
             }
         },
+        async refreshCaptcha() {
+            try {
+                const response = await axios.get(`${process.env.VUE_APP_BACKEND_URL}/user/generate_captcha`);
+                this.captchaKey = response.data.key;
+                this.captchaImageUrl = `${process.env.VUE_APP_BACKEND_URL}${response.data.image_url}`;
+            } catch (error) {
+                console.error('Error fetching captcha:', error);
+            }
+        },
         openRegisterPage() {
             this.$router.push({ name: 'RegisterPage' });
         },
@@ -79,6 +106,7 @@ export default {
         this.$nextTick(() => {
             document.title = '登录';
         });
+        this.refreshCaptcha();
     },
 };
 </script>
@@ -86,5 +114,11 @@ export default {
 <style scoped>
 .v-btn {
     font-size: 17px;
+}
+
+.captcha-container img {
+    cursor: pointer;
+    height: 50px;
+    /* 根据需要调整大小 */
 }
 </style>

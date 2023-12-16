@@ -1,14 +1,20 @@
+import os
+from datetime import timedelta
+
+from captcha.helpers import captcha_image_url
 from django.contrib.auth.hashers import make_password
 from django.contrib.auth.models import User
-from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth import authenticate, login, logout, update_session_auth_hash
 from django.core.exceptions import ObjectDoesNotExist
 from django.http import JsonResponse
 from django.contrib.auth.decorators import login_required
 from django.middleware.csrf import get_token
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_http_methods
+from django.views.decorators.http import require_http_methods, require_POST
 import json
+from captcha.models import CaptchaStore
 
 from book.models import Book
 from user.models import UserCollectedBook, UploadedBook
@@ -21,18 +27,52 @@ def init_csrf(request):
     return JsonResponse({'detail': 'CSRF cookie set'})
 
 
+def generate_captcha(request):
+    # 使用 CaptchaStore.generate_key() 方法生成新的验证码键
+    captcha_key = CaptchaStore.generate_key()
+
+    # 获取相应的图像 URL
+    image_url = captcha_image_url(captcha_key)
+
+    # 返回 JSON 响应
+    return JsonResponse({
+        'key': captcha_key,
+        'image_url': image_url
+    })
+
+
 def login_user(request):
     if request.method == 'POST':
         username = request.POST.get('username')
         password = request.POST.get('password')
+        captcha_key = request.POST.get('captcha_key')
+        captcha_value = request.POST.get('captcha_value')
+
+        # 检查验证码是否正确
+        try:
+            captcha = CaptchaStore.objects.get(response=captcha_value, hashkey=captcha_key)
+            captcha.delete()  # 删除已经使用的验证码
+        except CaptchaStore.DoesNotExist:
+            return JsonResponse({'success': False, 'error': 'Invalid captcha'})
+
+        # 检查用户是否已达到登录尝试限制
+        login_attempts = request.session.get('login_attempts', 0)
+        last_attempt_time = request.session.get('last_attempt_time', timezone.now())
+
+        if login_attempts >= 5 and timezone.now() < last_attempt_time + timedelta(minutes=1):
+            return JsonResponse({'success': False, 'error': 'Too many failed login attempts. Please try again later.'})
+
         user = authenticate(username=username, password=password)
         if user is not None:
             login(request, user)
+            request.session['login_attempts'] = 0  # 重置登录尝试次数
             return JsonResponse({'success': True})
         else:
+            request.session['login_attempts'] = login_attempts + 1
+            request.session['last_attempt_time'] = timezone.now()
             return JsonResponse({'success': False, 'error': 'Invalid credentials'})
-    else:
-        return JsonResponse({'success': False, 'error': 'Invalid request'})
+
+    return JsonResponse({'success': False, 'error': 'Invalid request'})
 
 
 @login_required
@@ -45,6 +85,18 @@ def register_user(request):
     if request.method == 'POST':
         try:
             data = json.loads(request.body)
+
+            captcha_key = data.get('captcha_key')
+            captcha_value = data.get('captcha_value')
+
+            # 验证验证码
+            try:
+                captcha = CaptchaStore.objects.get(hashkey=captcha_key)
+                if not captcha.response == captcha_value.lower():
+                    return JsonResponse({'success': False, 'message': '验证码错误'})
+            except CaptchaStore.DoesNotExist:
+                return JsonResponse({'success': False, 'message': '无效的验证码'})
+
             if User.objects.filter(username=data['username']).exists():
                 return JsonResponse({'success': False, 'message': '用户名已存在'})
 
@@ -192,3 +244,24 @@ def delete_uploaded_book(request, book_id):
     book.delete()
 
     return JsonResponse({'success': True, 'message': '书籍及相关文件已删除'})
+
+
+@login_required
+@require_POST
+def change_password(request):
+    current_password = request.POST.get('current_password')
+    new_password = request.POST.get('new_password')
+    user = request.user
+
+    # 确认当前密码是否正确
+    if not user.check_password(current_password):
+        return JsonResponse({'success': False, 'message': '当前密码不正确'}, status=400)
+
+    # 设置新密码并保存用户对象
+    user.set_password(new_password)
+    user.save()
+
+    # 更新会话以保持用户登录状态
+    update_session_auth_hash(request, user)
+
+    return JsonResponse({'success': True, 'message': '密码已更新'})

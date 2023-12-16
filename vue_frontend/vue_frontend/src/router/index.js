@@ -9,7 +9,8 @@ import BookDetailPage from '@/views/BookDetailPage.vue'
 import FavoritesPage from '@/views/FavoritesPage.vue';
 import UploadedBookManagementPage from '@/views/UploadedBookManagementPage.vue';
 import PersonalCenterPage from '@/views/PersonalCenterPage.vue';
-import RegisterPage from '@/views/RegisterPage';
+import RegisterPage from '@/views/RegisterPage.vue';
+import PasswordModificationPage from '@/views/PasswordModificationPage.vue';
 
 // 定义路由
 // 每个路由都需要映射到一个组件
@@ -55,6 +56,11 @@ const routes = [
         name: 'RegisterPage',
         component: RegisterPage
     },
+    {
+        path: '/change-password',
+        name: 'PasswordModificationPage',
+        component: PasswordModificationPage
+    }
 ];
 
 const router = createRouter({
@@ -63,6 +69,7 @@ const router = createRouter({
 });
 
 router.beforeEach(async (to, from, next) => {
+    console.log("in");
     try {
         const sessionResponse = await axios.get(`${process.env.VUE_APP_BACKEND_URL}/user/check_session/`, { withCredentials: true });
 

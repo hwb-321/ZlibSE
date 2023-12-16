@@ -1,10 +1,12 @@
-from django.urls import path
+from django.urls import path, include
 from user import views
 from django.conf import settings
 from django.conf.urls.static import static
 
 
 urlpatterns = [
+    path('generate_captcha/', views.generate_captcha, name='generate_captcha'),
+    path('captcha/', include('captcha.urls')),
     path('login_user/', views.login_user, name='login_user'),
     path('logout_user/', views.logout_user, name='logout_user'),
     path('register_user', views.register_user, name='register_user'),
@@ -16,4 +18,5 @@ urlpatterns = [
     path('check_favorite/<int:book_id>', views.check_favorite, name='check_favorite'),
     path('get_upload_book_list', views.upload_book_list, name='get_upload_book_list'),
     path('delete_uploaded_book/<int:book_id>', views.delete_uploaded_book, name='delete_uploaded_book'),
+    path('change_password_user', views.change_password, name='change_password_user'),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

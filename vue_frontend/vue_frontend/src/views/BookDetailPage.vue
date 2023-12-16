@@ -1,23 +1,40 @@
 <template>
-    <div class="book-detail">
-        <div class="book-cover">
-            <img :src="coverImage" alt="Book Cover" />
-        </div>
-        <div class="book-info">
-            <h2>{{ title }}</h2>
-            <div class="book-meta">
-                <span>作者: {{ author }}</span>
-                <span>ISBN: {{ isbn }}</span>
-                <span>种类: {{ category }}</span>
-                <span>年份: {{ year }}</span>
-                <span>语言: {{ language }}</span>
-                <span>文件类型: {{ file_type }}</span>
-                <span>文件大小: {{ formattedFileSize }}</span>
-            </div>
-            <button @click="downloadBook">下载</button>
-            <button @click="toggleFavorite">{{ isFavorited ? '取消收藏' : '收藏' }}</button>
-        </div>
-    </div>
+    <v-container>
+        <v-row align="start">
+            <v-col cols="12" md="6">
+                <v-img :src="coverImage" alt="Book Cover" height="100%" contain></v-img>
+            </v-col>
+            <v-col cols="12" md="6">
+                <v-card class="book-info" height="100%">
+                    <v-card-title>{{ title }}</v-card-title>
+                    <v-card-subtitle>{{ author }}</v-card-subtitle>
+                    <v-card-text>
+                        <div>ISBN: {{ isbn }}</div>
+                        <div>种类: {{ category }}</div>
+                        <div>年份: {{ year }}</div>
+                        <div>语言: {{ language }}</div>
+                        <div>文件类型: {{ file_type }}</div>
+                        <div>文件大小: {{ formattedFileSize }}</div>
+                    </v-card-text>
+                    <v-card-actions>
+                        <v-card-actions class="justify-space-between">
+                            <v-btn color="primary" variant="outlined" @click="downloadBook">
+                                <v-icon left>mdi-download</v-icon>
+                                下载
+                            </v-btn>
+                        </v-card-actions>
+                        <v-spacer></v-spacer>
+                        <v-card-actions class="justify-space-between">
+                            <v-btn color="secondary" variant="outlined" @click="toggleFavorite">
+                                <v-icon left>{{ isFavorited ? 'mdi-heart' : 'mdi-heart-outline' }}</v-icon>
+                                {{ isFavorited ? '取消收藏' : '收藏' }}
+                            </v-btn>
+                        </v-card-actions>
+                    </v-card-actions>
+                </v-card>
+            </v-col>
+        </v-row>
+    </v-container>
 </template>
   
 <script>
@@ -29,6 +46,11 @@ export default {
             type: Number,
             required: true
         }
+    },
+    mounted() {
+        this.$nextTick(() => {
+            document.title = '书籍详情';
+        });
     },
     data() {
         return {
@@ -132,38 +154,16 @@ export default {
     }
 };
 </script>
-  
-<style scoped>
-.book-detail {
-    display: flex;
-    margin: 20px;
-}
 
-.book-cover img {
-    max-width: 200px;
-    margin-right: 20px;
+<style scoped>
+.book-cover {
+    max-width: 100%;
+    height: auto;
 }
 
 .book-info {
-    flex: 1;
-}
-
-.book-meta {
-    margin-bottom: 10px;
-}
-
-.book-meta span {
-    display: block;
-    margin-bottom: 5px;
-}
-
-button {
-    padding: 10px 20px;
-    cursor: pointer;
-    background-color: #0056b3;
-    color: white;
-    border: none;
-    border-radius: 5px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
 }
 </style>
-  

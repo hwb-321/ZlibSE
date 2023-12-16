@@ -16,6 +16,17 @@
                                 required></v-text-field>
                             <v-text-field label="确认密码" prepend-icon="mdi-lock-check" v-model="passwordConfirm"
                                 type="password" required></v-text-field>
+                            <v-row no-gutters>
+                                <v-col cols="9">
+                                    <v-text-field label="验证码" prepend-icon="mdi-shield-key" type="text"
+                                        v-model="captchaValue" required></v-text-field>
+                                </v-col>
+                                <v-col cols="3">
+                                    <div class="captcha-container">
+                                        <img :src="captchaImageUrl" @click="refreshCaptcha" />
+                                    </div>
+                                </v-col>
+                            </v-row>
                         </v-form>
                     </v-card-text>
                     <v-card-actions>
@@ -48,7 +59,10 @@ export default {
                 password: ''
             },
             passwordConfirm: '',
-            message: ''
+            message: '',
+            captchaKey: '',
+            captchaValue: '',
+            captchaImageUrl: '',
         };
     },
     methods: {
@@ -58,7 +72,17 @@ export default {
                 return;
             }
             try {
-                const response = await axios.post(`${process.env.VUE_APP_BACKEND_URL}/user/register_user`, this.user, {
+                const formData = new URLSearchParams();
+                Object.keys(this.user).forEach(key => {
+                    formData.append(key, this.user[key]);
+                });
+                formData.append('captcha_key', this.captchaKey);
+                formData.append('captcha_value', this.captchaValue);
+
+                const response = await axios.post(`${process.env.VUE_APP_BACKEND_URL}/user/register_user`, formData, {
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
                     withCredentials: true
                 });
 
@@ -80,11 +104,21 @@ export default {
             const routeData = this.$router.resolve({ name: 'LoginPage' });
             window.open(routeData.href, '_blank');
         },
+        async refreshCaptcha() {
+            try {
+                const response = await axios.get(`${process.env.VUE_APP_BACKEND_URL}/user/generate_captcha`);
+                this.captchaKey = response.data.key;
+                this.captchaImageUrl = `${process.env.VUE_APP_BACKEND_URL}${response.data.image_url}`;
+            } catch (error) {
+                console.error('Error fetching captcha:', error);
+            }
+        },
     },
     mounted() {
         this.$nextTick(() => {
             document.title = '注册';
         });
+        this.refreshCaptcha();
     },
 };
 </script>

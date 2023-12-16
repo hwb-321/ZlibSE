@@ -39,6 +39,7 @@ INSTALLED_APPS = [
 
     'user',
     'book',
+    'captcha',
 ]
 
 MIDDLEWARE = [
@@ -133,9 +134,22 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 CORS_ORIGIN_WHITELIST = [
     'http://localhost:8080',  # 允许前端地址
+    'http://192.168.74.1:8080'
 ]
 
 CORS_ALLOW_CREDENTIALS = True
 
 CSRF_COOKIE_SECURE = False
-CSRF_TRUSTED_ORIGINS = ['http://localhost:8080', ]
+CSRF_TRUSTED_ORIGINS = ['http://localhost:8080', 'http://192.168.74.1:8080', ]
+
+# 字母验证码
+CAPTCHA_IMAGE_SIZE = (80, 45)  # 设置 captcha 图片大小
+CAPTCHA_LENGTH = 4  # 字符个数
+CAPTCHA_TIMEOUT = 1  # 超时(minutes)
+# 加减乘除验证码
+CAPTCHA_OUTPUT_FORMAT = '%(image)s %(text_field)s %(hidden_field)s '
+CAPTCHA_NOISE_FUNCTIONS = ('captcha.helpers.noise_null',
+                           'captcha.helpers.noise_arcs',  # 线
+                           'captcha.helpers.noise_dots',  # 点
+                           )
+CAPTCHA_CHALLENGE_FUNCT = 'captcha.helpers.random_char_challenge'

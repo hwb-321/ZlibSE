@@ -1,44 +1,38 @@
 <template>
-    <div class="upload-book-container">
-        <h1>上传书籍</h1>
-        <form @submit.prevent="submitBook">
-            <div>
-                <label for="title">书名:</label>
-                <input id="title" v-model="book.title" type="text" required>
-            </div>
-            <div>
-                <label for="author">作者:</label>
-                <input id="author" v-model="book.author" type="text" required>
-            </div>
-            <div>
-                <label for="isbn">ISBN:</label>
-                <input id="isbn" v-model="book.isbn" type="text" required>
-            </div>
-            <div>
-                <label for="category">种类:</label>
-                <input id="category" v-model="book.category" type="text" required>
-            </div>
-            <div>
-                <label for="year">年份:</label>
-                <input id="year" v-model="book.year" type="number" required>
-            </div>
-            <div>
-                <label for="language">语言:</label>
-                <input id="language" v-model="book.language" type="text" required>
-            </div>
-            <div>
-                <label for="cover">封面图片:</label>
-                <input id="cover" type="file" @change="handleCoverChange" accept="image/*">
-            </div>
-            <div>
-                <label for="file">文件:</label>
-                <input id="file" type="file" @change="handleFileChange">
-            </div>
-            <button type="submit">上传</button>
-        </form>
-        <div v-if="message">{{ message }}</div>
-    </div>
+    <v-container>
+        <v-row>
+            <v-col cols="12" class="d-flex justify-space-around align-center mb-3">
+                <h1>上传书籍</h1>
+                <router-link to="/uploaded-book-management">
+                    <v-btn color="secondary">返回上传管理</v-btn>
+                </router-link>
+            </v-col>
+        </v-row>
+
+        <v-form @submit.prevent="submitBook">
+            <v-text-field label="书名" v-model="book.title" required></v-text-field>
+            <v-text-field label="作者" v-model="book.author" required></v-text-field>
+            <v-text-field label="ISBN" v-model="book.isbn" required></v-text-field>
+            <v-text-field label="种类" v-model="book.category" required></v-text-field>
+            <v-text-field label="年份" v-model="book.year" type="number" required></v-text-field>
+            <v-text-field label="语言" v-model="book.language" required></v-text-field>
+
+            <v-file-input label="封面图片" @change="handleCoverChange" accept="image/*"></v-file-input>
+            <v-file-input label="文件" @change="handleFileChange"></v-file-input>
+
+            <v-btn type="submit" color="primary" :disabled="!isFormValid">上传</v-btn>
+        </v-form>
+
+        <v-alert type="error" v-if="errorMessage" class="mt-4">
+            {{ errorMessage }}
+        </v-alert>
+
+        <v-alert type="success" v-if="successMessage" class="mt-4">
+            {{ successMessage }}
+        </v-alert>
+    </v-container>
 </template>
+  
   
 <script>
 import axios from 'axios';
@@ -56,8 +50,14 @@ export default {
             },
             file_path: null,
             cover_image_path: null,
-            message: ''
+            errorMessage: '',
+            successMessage: '',
         };
+    },
+    mounted() {
+        this.$nextTick(() => {
+            document.title = '上传书籍';
+        });
     },
     computed: {
         isFormValid() {
@@ -75,7 +75,7 @@ export default {
         },
         async submitBook() {
             if (!this.isFormValid) {
-                this.message = '请填写所有字段';
+                this.errorMessage = '请填写所有字段';
                 return;
             }
 
@@ -97,10 +97,12 @@ export default {
                     },
                     withCredentials: true
                 });
-                this.showMessage('上传成功');
+                this.successMessage = '上传成功';
+                this.errorMessage = '';
             } catch (error) {
                 console.error('Upload error:', error);
-                this.showMessage('上传失败，请重试。');
+                this.errorMessage = '上传失败，请重试。';
+                this.successMessage = '';
             }
         },
         showMessage(msg) {

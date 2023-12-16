@@ -1,22 +1,23 @@
 <template>
-  <div class="home-container">
-    <div class="personal-center-link">
-      <router-link to="/personal-center">个人中心</router-link>
+  <v-app>
+    <div class="home-container">
+      <v-container>
+        <v-row justify="center">
+          <v-col cols="12" md="8">
+            <v-text-field v-model="searchQuery" @keyup.enter="searchBooks" placeholder="搜索书籍..." append-icon="mdi-magnify"
+              @click:append="searchBooks" solo></v-text-field>
+          </v-col>
+        </v-row>
+
+        <!-- 书籍列表 -->
+        <v-row>
+          <v-col cols="12" sm="6" md="4" v-for="book in books" :key="book.id">
+            <BookCard :book="book" />
+          </v-col>
+        </v-row>
+      </v-container>
     </div>
-    <h1>书籍总数: {{ bookCount }}</h1>
-
-    <!-- 搜索框和搜索按钮 -->
-    <div class="search-container">
-      <input v-model="searchQuery" @keyup.enter="searchBooks" placeholder="搜索书籍...">
-      <button @click="searchBooks">搜索</button>
-    </div>
-
-    <!-- 书籍列表 -->
-    <BookCard v-for="book in books" :key="book.id" :book="book" :to="{ name: 'BookDetail', params: { id: book.id } }" />
-
-    <!-- 退出登录按钮 -->
-    <button @click="logout">退出登录</button>
-  </div>
+  </v-app>
 </template>
 
 <script>
@@ -28,6 +29,11 @@ export default {
   components: {
     BookCard
   },
+  mounted() {
+        this.$nextTick(() => {
+            document.title = 'ZlibSE';
+        });
+    },
   data() {
     return {
       bookCount: 0,
