@@ -24,7 +24,7 @@ SECRET_KEY = 'django-insecure-d)n1^%%o-l@%ld13gl7h#$%ygm$r!z69z1s!23(imi5043bki9
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['localhost']
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', '192.168.157.177']
 
 # Application definition
 
@@ -40,7 +40,10 @@ INSTALLED_APPS = [
     'user',
     'book',
     'captcha',
+
+    "sslserver",
 ]
+# SECURE_SSL_REDIRECT = True
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
@@ -59,7 +62,7 @@ ROOT_URLCONF = 'ZlibSE.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [BASE_DIR / 'templates'],
+        'DIRS': [os.path.join(BASE_DIR, 'static')],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -117,13 +120,11 @@ USE_I18N = True
 
 USE_TZ = True
 
-# Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/5.0/howto/static-files/
-
-STATIC_URL = 'static/'
-
-# Default primary key field type
-# https://docs.djangoproject.com/en/5.0/ref/settings/#default-auto-field
+STATIC_URL = '/static/'
+STATICFILES_DIRS = [
+    os.path.join(BASE_DIR, 'static'),  # 'static' 是放置 Vue.js 构建文件的目录
+]
+STATIC_ROOT = '/static/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
@@ -134,13 +135,14 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 CORS_ORIGIN_WHITELIST = [
     'http://localhost:8080',  # 允许前端地址
-    'http://192.168.74.1:8080'
+    'http://127.0.0.1.8000',
+    "http://192.168.157.177:8080",
 ]
 
 CORS_ALLOW_CREDENTIALS = True
 
 CSRF_COOKIE_SECURE = False
-CSRF_TRUSTED_ORIGINS = ['http://localhost:8080', 'http://192.168.74.1:8080', ]
+CSRF_TRUSTED_ORIGINS = ['http://localhost:8080', 'http://127.0.0.1:8080', "http://192.168.157.177:8080", ]
 
 # 字母验证码
 CAPTCHA_IMAGE_SIZE = (80, 45)  # 设置 captcha 图片大小

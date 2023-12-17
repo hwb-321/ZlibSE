@@ -17,9 +17,9 @@ const vuetify = createVuetify({
 const axiosInstance = axios.create();
 
 axios.interceptors.request.use(async (config) => {
+    console.log("尝试读取cookie：" + getCookie('csrftoken'));
     if (!document.cookie.includes('csrftoken')) {
-        // 使用新的 Axios 实例来获取 CSRF 令牌
-        await axiosInstance.get(`${process.env.VUE_APP_BACKEND_URL}/user/init_csrf/`, { withCredentials: true });
+        await axiosInstance.get(`${process.env.VUE_APP_BACKEND_URL}/user/init_csrf`, { withCredentials: true });
         console.log('已成功获取csrf令牌');
         config.headers['X-CSRFToken'] = getCookie('csrftoken');
     } else {

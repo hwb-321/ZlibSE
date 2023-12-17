@@ -1,5 +1,5 @@
 <template>
-    <router-link :to="{ name: 'BookDetail', params: { id: book.id } }" class="book-card-link">
+    <router-link :to="{ name: 'BookDetail', params: { bookId: book.id } }" class="book-card-link">
         <div class="book-card d-flex" outlined>
             <v-col cols="12">
                 <div class="content-container">

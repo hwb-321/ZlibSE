@@ -89,7 +89,7 @@ export default {
     methods: {
         async fetchBookDetails() {
             try {
-                const response = await axios.get(`${process.env.VUE_APP_BACKEND_URL}/book/get_descriptions/${this.$route.params.id}`, { withCredentials: true });
+                const response = await axios.get(`${process.env.VUE_APP_BACKEND_URL}/book/get_descriptions/${this.bookId}`, { withCredentials: true });
 
                 const bookData = response.data;
                 this.title = bookData.title;
@@ -100,21 +100,21 @@ export default {
                 this.language = bookData.language;
                 this.file_type = bookData.file_type;
                 this.file_size = bookData.file_size;
-                this.coverImage = this.$getCoverUrl(this.$route.params.id);
+                this.coverImage = this.$getCoverUrl(this.bookId);
 
-                const favoriteResponse = await axios.get(`${process.env.VUE_APP_BACKEND_URL}/user/check_favorite/${this.$route.params.id}`, { withCredentials: true });
+                const favoriteResponse = await axios.get(`${process.env.VUE_APP_BACKEND_URL}/user/check_favorite/${this.bookId}`, { withCredentials: true });
                 this.isFavorited = favoriteResponse.data.isFavorited;
             } catch (error) {
                 console.error('Error fetching book details:', error);
             }
         },
         downloadBook() {
-            const downloadUrl = `${process.env.VUE_APP_BACKEND_URL}/book/download/${this.$route.params.id}`;
+            const downloadUrl = `${process.env.VUE_APP_BACKEND_URL}/book/download/${this.bookId}`;
             window.location.href = downloadUrl;
         },
         async addToFavorites() {
             try {
-                const response = await axios.post(`${process.env.VUE_APP_BACKEND_URL}/user/add_to_favorites/${this.$route.params.id}`, {}, {
+                const response = await axios.post(`${process.env.VUE_APP_BACKEND_URL}/user/add_to_favorites/${this.bookId}`, {}, {
                     withCredentials: true
                 });
 
@@ -135,10 +135,10 @@ export default {
                 let response;
                 if (this.isFavorited) {
                     // 如果当前已收藏，发送取消收藏的请求
-                    response = await axios.post(`${process.env.VUE_APP_BACKEND_URL}/user/remove_from_favorites/${this.$route.params.id}`, {}, { withCredentials: true });
+                    response = await axios.post(`${process.env.VUE_APP_BACKEND_URL}/user/remove_from_favorites/${this.bookId}`, {}, { withCredentials: true });
                 } else {
                     // 如果当前未收藏，发送添加收藏的请求
-                    response = await axios.post(`${process.env.VUE_APP_BACKEND_URL}/user/add_to_favorites/${this.$route.params.id}`, {}, { withCredentials: true });
+                    response = await axios.post(`${process.env.VUE_APP_BACKEND_URL}/user/add_to_favorites/${this.bookId}`, {}, { withCredentials: true });
                 }
 
                 if (response.data.success) {

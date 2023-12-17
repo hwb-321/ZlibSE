@@ -31,7 +31,7 @@ const routes = [
         component: UploadBookPage
     },
     {
-        path: '/book/:id',
+        path: '/book/:bookId',
         name: 'BookDetail',
         component: BookDetailPage,
         props: true
@@ -71,7 +71,7 @@ const router = createRouter({
 router.beforeEach(async (to, from, next) => {
     console.log("in");
     try {
-        const sessionResponse = await axios.get(`${process.env.VUE_APP_BACKEND_URL}/user/check_session/`, { withCredentials: true });
+        const sessionResponse = await axios.get(`${process.env.VUE_APP_BACKEND_URL}/user/check_session`, { withCredentials: true });
 
         if (sessionResponse.data.isLoggedIn) {
             // 如果用户已登录且当前在登录页面，则跳转到主页面

@@ -68,7 +68,7 @@ export default {
                 formData.append('username', this.username);
                 formData.append('password', this.password);
 
-                const response = await axios.post(`${process.env.VUE_APP_BACKEND_URL}/user/login_user/`, formData, {
+                const response = await axios.post(`${process.env.VUE_APP_BACKEND_URL}/user/login_user`, formData, {
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded',
                     },

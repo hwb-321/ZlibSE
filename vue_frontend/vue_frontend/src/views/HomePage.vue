@@ -30,10 +30,10 @@ export default {
     BookCard
   },
   mounted() {
-        this.$nextTick(() => {
-            document.title = 'ZlibSE';
-        });
-    },
+    this.$nextTick(() => {
+      document.title = 'ZlibSE';
+    });
+  },
   data() {
     return {
       bookCount: 0,
@@ -44,7 +44,7 @@ export default {
   methods: {
     async logout() {
       try {
-        const response = await axios.post(`${process.env.VUE_APP_BACKEND_URL}/user/logout_user/`, {}, { withCredentials: true });
+        const response = await axios.post(`${process.env.VUE_APP_BACKEND_URL}/user/logout_user`, {}, { withCredentials: true });
         if (response.data.success) {
           this.$router.push('/');
         } else {
