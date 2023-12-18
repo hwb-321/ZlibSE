@@ -19,4 +19,5 @@ urlpatterns = [
     path('get_upload_book_list', views.upload_book_list, name='get_upload_book_list'),
     path('delete_uploaded_book/<int:book_id>', views.delete_uploaded_book, name='delete_uploaded_book'),
     path('change_password_user', views.change_password, name='change_password_user'),
+    path('change_uploaded_book/<int:book_id>', views.change_uploaded_book, name='change_uploaded_book'),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

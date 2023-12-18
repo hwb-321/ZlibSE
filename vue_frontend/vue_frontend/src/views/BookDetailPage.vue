@@ -1,14 +1,16 @@
 <template>
     <v-container>
-        <v-row align="start">
+        <v-row align="center" justify="center">
             <v-col cols="12" md="6">
-                <v-img :src="coverImage" alt="Book Cover" height="100%" contain></v-img>
+                <v-img :src="coverImage" alt="Book Cover" height="50vh" contain></v-img>
             </v-col>
             <v-col cols="12" md="6">
-                <v-card class="book-info" height="100%">
-                    <v-card-title>{{ title }}</v-card-title>
-                    <v-card-subtitle>{{ author }}</v-card-subtitle>
-                    <v-card-text>
+                <v-card class="book-info" height="auto">
+                    <div class="text-md-center text-center">
+                        <v-card-title>{{ title }}</v-card-title>
+                        <v-card-subtitle>{{ author }}</v-card-subtitle>
+                    </div>
+                    <v-card-text class="text-md-left text-center">
                         <div>ISBN: {{ isbn }}</div>
                         <div>种类: {{ category }}</div>
                         <div>年份: {{ year }}</div>
@@ -16,20 +18,19 @@
                         <div>文件类型: {{ file_type }}</div>
                         <div>文件大小: {{ formattedFileSize }}</div>
                     </v-card-text>
-                    <v-card-actions>
-                        <v-card-actions class="justify-space-between">
-                            <v-btn color="primary" variant="outlined" @click="downloadBook">
-                                <v-icon left>mdi-download</v-icon>
-                                下载
-                            </v-btn>
-                        </v-card-actions>
-                        <v-spacer></v-spacer>
-                        <v-card-actions class="justify-space-between">
-                            <v-btn color="secondary" variant="outlined" @click="toggleFavorite">
-                                <v-icon left>{{ isFavorited ? 'mdi-heart' : 'mdi-heart-outline' }}</v-icon>
-                                {{ isFavorited ? '取消收藏' : '收藏' }}
-                            </v-btn>
-                        </v-card-actions>
+                    <v-card-actions class="justify-space-between">
+                        <v-btn color="primary" variant="outlined" @click="downloadBook">
+                            <v-icon left>mdi-download</v-icon>
+                            下载
+                        </v-btn>
+                        <v-btn color="info" variant="outlined" @click="openOnlineReader">
+                            <v-icon left>mdi-book-open-variant</v-icon>
+                            在线阅读
+                        </v-btn>
+                        <v-btn color="secondary" variant="outlined" @click="toggleFavorite">
+                            <v-icon left>{{ isFavorited ? 'mdi-heart' : 'mdi-heart-outline' }}</v-icon>
+                            {{ isFavorited ? '取消收藏' : '收藏' }}
+                        </v-btn>
                     </v-card-actions>
                 </v-card>
             </v-col>
@@ -151,19 +152,35 @@ export default {
                 alert('操作失败');
             }
         },
+        openOnlineReader() {
+            const readerUrl = `/online-reader-epub?bookId=${this.bookId}`;
+            window.open(readerUrl, '_blank');
+        },
     }
 };
 </script>
 
 <style scoped>
-.book-cover {
-    max-width: 100%;
-    height: auto;
-}
-
 .book-info {
     display: flex;
     flex-direction: column;
-    justify-content: space-between;
+}
+
+/* 屏幕宽度达到 md 断点时的样式 */
+@media only screen and (min-width: 960px) {
+    .book-info {
+        /* 确保卡片内容顶部对齐 */
+        align-items: flex-start;
+    }
+
+    .book-info>.text-md-center {
+        /* 确保标题和副标题在宽屏幕上居中 */
+        text-align: center;
+    }
+
+    .book-info>.text-md-left {
+        /* 确保卡片的其他内容在宽屏幕上靠左 */
+        text-align: left;
+    }
 }
 </style>

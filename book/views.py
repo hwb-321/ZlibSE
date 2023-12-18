@@ -1,9 +1,11 @@
 import os
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator, EmptyPage
 from django.db.models import Q
 from django.http import FileResponse, Http404, JsonResponse
 from django.utils.text import slugify
+from django.views.decorators.http import require_POST, require_http_methods
 
 from user.models import UploadedBook
 from .forms import BookForm
@@ -14,7 +16,8 @@ def get_descriptions(request):
     pass
 
 
-@login_required
+# 此处不能加@logini_required，否则可能会有点问题
+# @login_required
 def download_book(request, book_id):
     try:
         book = Book.objects.get(pk=book_id)
@@ -22,14 +25,16 @@ def download_book(request, book_id):
         if not os.path.exists(file_path):
             raise Http404("文件不存在")
 
-        # 提取原始文件扩展名
         _, file_extension = os.path.splitext(file_path)
+        download_filename = f"{book.title}{file_extension}"
 
-        # 创建一个以书名为文件名的安全字符串
-        safe_title = slugify(book.title)
-        download_filename = f"{safe_title}{file_extension}"
+        content_type = 'application/epub+zip' if file_extension.lower() == '.epub' else 'application/octet-stream'
 
-        return FileResponse(open(file_path, 'rb'), as_attachment=True, filename=download_filename)
+        # 直接打开文件，不要使用 'with' 语句
+        file = open(file_path, 'rb')
+        response = FileResponse(file, as_attachment=True, filename=download_filename, content_type=content_type)
+        return response
+
     except Book.DoesNotExist:
         raise Http404("书籍不存在")
 
@@ -40,7 +45,7 @@ def upload_book(request):
         form = BookForm(request.POST, request.FILES)
         if form.is_valid():
             book = form.save(commit=False)
-            book.file_type = form.cleaned_data.get('file_type', '')  # 获取文件类型
+            book.file_type = form.cleaned_data.get('file_type')  # 获取文件类型
             file = request.FILES.get('file_path')
             if file:
                 # 计算文件大小并转换为MB

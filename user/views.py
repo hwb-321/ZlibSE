@@ -1,5 +1,6 @@
 import os
 from datetime import timedelta
+import logging
 
 from captcha.helpers import captcha_image_url
 from django.contrib.auth.hashers import make_password
@@ -16,6 +17,7 @@ from django.views.decorators.http import require_http_methods, require_POST
 import json
 from captcha.models import CaptchaStore
 
+from book.forms import BookForm
 from book.models import Book
 from user.models import UserCollectedBook, UploadedBook
 
@@ -199,8 +201,12 @@ def get_favorites(request):
 def upload_book_list(request):
     user = request.user
 
-    # 查询当前用户上传的所有书籍的记录
-    uploaded_books_records = UploadedBook.objects.filter(user=user).select_related('book')
+    if user.is_superuser:
+        # 如果用户是超级用户，查询所有上传的书籍
+        uploaded_books_records = UploadedBook.objects.all().select_related('book')
+    else:
+        # 否则，只查询当前用户上传的书籍
+        uploaded_books_records = UploadedBook.objects.filter(user=user).select_related('book')
 
     # 构造书籍详细信息列表
     books_list = [
@@ -265,3 +271,40 @@ def change_password(request):
     update_session_auth_hash(request, user)
 
     return JsonResponse({'success': True, 'message': '密码已更新'})
+
+
+@login_required
+@require_http_methods(["POST"])
+def change_uploaded_book(request, book_id):
+    try:
+        if request.user.is_superuser:
+            # 超级用户可以修改任何书籍
+            book = Book.objects.get(pk=book_id)
+        else:
+            # 非超级用户只能修改他们上传的书籍
+            uploaded_book = UploadedBook.objects.get(book_id=book_id, user=request.user)
+            book = uploaded_book.book
+
+        form = BookForm(request.POST, request.FILES, instance=book)
+        if form.is_valid():
+            book = form.save(commit=False)
+
+            # 处理文件和封面图片的更新
+            if 'file_path' in request.FILES:
+                file = request.FILES['file_path']
+                book.file_size = file.size / (1024 * 1024)  # 文件大小转换为MB
+                book.file_type = file.content_type
+                book.file_path = file
+
+            if 'cover_image_path' in request.FILES:
+                book.cover_image_path = request.FILES['cover_image_path']
+
+            book.save()
+            return JsonResponse({'success': True, 'message': '书籍信息更新成功'})
+        else:
+            return JsonResponse({'success': False, 'message': '更新失败', 'errors': form.errors})
+
+    except UploadedBook.DoesNotExist:
+        return JsonResponse({'success': False, 'message': '无权修改此书籍或书籍不存在'}, status=403)
+    except Exception as e:
+        return JsonResponse({'success': False, 'message': f'更新书籍信息时发生错误: {str(e)}'}, status=500)

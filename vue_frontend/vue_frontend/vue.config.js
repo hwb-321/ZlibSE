@@ -5,4 +5,6 @@ module.exports = defineConfig({
   publicPath: process.env.NODE_ENV === 'production'
     ? '/'  // 生产环境下的公共路径
     : '/',        // 开发环境下的公共路径
+
+  assetsDir: 'static',
 });

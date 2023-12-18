@@ -11,7 +11,9 @@
       <v-btn text @click="logout">退出登录</v-btn>
     </v-app-bar>
 
-    <router-view></router-view>
+    <v-container style="height: 100vh;">
+      <router-view style="padding-top: 60px;"></router-view>
+    </v-container>
   </v-app>
 </template>
 
@@ -25,7 +27,7 @@ export default {
     shouldShowAppBar() {
       // 这里的逻辑可能根据你的路由结构有所不同
       // 假设 'login' 和 'register' 是登录和注册路由的名称
-      const excludedRoutes = ['LoginPage', 'RegisterPage'];
+      const excludedRoutes = ['LoginPage', 'RegisterPage', 'EpubReaderPage'];
       return !excludedRoutes.includes(this.$route.name);
     }
   },
@@ -53,13 +55,10 @@ export default {
   -moz-osx-font-smoothing: grayscale;
   text-align: center;
   color: #2c3e50;
-  margin-top: 60px;
 }
 
 .toolbar-title-link {
   text-decoration: none;
-  /* 移除链接下划线 */
   color: inherit;
-  /* 使用v-app-bar设置的颜色 */
 }
 </style>

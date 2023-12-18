@@ -1,23 +1,21 @@
 <template>
-  <v-app>
+  <v-container>
     <div class="home-container">
-      <v-container>
-        <v-row justify="center">
-          <v-col cols="12" md="8">
-            <v-text-field v-model="searchQuery" @keyup.enter="searchBooks" placeholder="搜索书籍..." append-icon="mdi-magnify"
-              @click:append="searchBooks" solo></v-text-field>
-          </v-col>
-        </v-row>
+      <v-row justify="center">
+        <v-col cols="12" md="8">
+          <v-text-field v-model="searchQuery" @keyup.enter="searchBooks" placeholder="搜索书籍..." append-icon="mdi-magnify"
+            @click:append="searchBooks" solo></v-text-field>
+        </v-col>
+      </v-row>
 
-        <!-- 书籍列表 -->
-        <v-row>
-          <v-col cols="12" sm="6" md="4" v-for="book in books" :key="book.id">
-            <BookCard :book="book" />
-          </v-col>
-        </v-row>
-      </v-container>
+      <!-- 书籍列表 -->
+      <v-row>
+        <v-col cols="12" sm="6" md="4" v-for="book in books" :key="book.id">
+          <BookCard :book="book" />
+        </v-col>
+      </v-row>
     </div>
-  </v-app>
+  </v-container>
 </template>
 
 <script>
@@ -100,6 +98,7 @@ export default {
 <style scoped>
 .home-container {
   margin: 20px;
+  max-height: 100%;
 }
 
 .personal-center-link {

@@ -11,9 +11,9 @@ import UploadedBookManagementPage from '@/views/UploadedBookManagementPage.vue';
 import PersonalCenterPage from '@/views/PersonalCenterPage.vue';
 import RegisterPage from '@/views/RegisterPage.vue';
 import PasswordModificationPage from '@/views/PasswordModificationPage.vue';
+import EpubReaderPage from '@/views/OnlineReader/EpubReaderPage.vue';
+import ModifyBookInfoPage from '@/views/ModifyBookInfoPage.vue';
 
-// 定义路由
-// 每个路由都需要映射到一个组件
 const routes = [
     {
         path: '/',
@@ -60,6 +60,16 @@ const routes = [
         path: '/change-password',
         name: 'PasswordModificationPage',
         component: PasswordModificationPage
+    },
+    {
+        path: '/online-reader-epub',
+        name: 'EpubReaderPage',
+        component: EpubReaderPage
+    },
+    {
+        path: '/modify-book/:bookId',
+        name: 'ModifyBookInfoPage',
+        component: ModifyBookInfoPage
     }
 ];
 
