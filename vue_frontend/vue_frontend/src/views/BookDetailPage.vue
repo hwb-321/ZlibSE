@@ -23,7 +23,7 @@
                             <v-icon left>mdi-download</v-icon>
                             下载
                         </v-btn>
-                        <v-btn color="info" variant="outlined" @click="openOnlineReader">
+                        <v-btn v-if="file_type === 'epub'" color="info" variant="outlined" @click="openOnlineReader">
                             <v-icon left>mdi-book-open-variant</v-icon>
                             在线阅读
                         </v-btn>

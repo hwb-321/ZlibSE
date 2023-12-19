@@ -14,9 +14,23 @@
           <BookCard :book="book" />
         </v-col>
       </v-row>
+
+      <!-- 分页组件 -->
+      <v-row v-if="showPagination" justify="center">
+        <v-col cols="10">
+          <v-pagination v-model="currentPage" :length="totalPages">
+            <template v-slot:item="{ page, props }">
+              <v-btn v-bind="props" @click="handlePageChange(page)">
+                {{ page }}
+              </v-btn>
+            </template>
+          </v-pagination>
+        </v-col>
+      </v-row>
     </div>
   </v-container>
 </template>
+
 
 <script>
 import axios from 'axios';
@@ -34,38 +48,35 @@ export default {
   },
   data() {
     return {
-      bookCount: 0,
       books: [],
-      searchQuery: '' // 搜索查询字符串
+      searchQuery: '',
+      currentPage: 1,
+      totalPages: 0,
+      pageSize: 12,
+      showPagination: true,
     };
   },
   methods: {
-    async logout() {
-      try {
-        const response = await axios.post(`${process.env.VUE_APP_BACKEND_URL}/user/logout_user`, {}, { withCredentials: true });
-        if (response.data.success) {
-          this.$router.push('/');
-        } else {
-          console.error('Logout failed:', response.data.error);
-        }
-      } catch (error) {
-        console.error('Logout error:', error);
-      }
-    },
-    async fetchBookCount() {
+    async fetchBooksCount() {
       try {
         const response = await axios.get(`${process.env.VUE_APP_BACKEND_URL}/book/count`, {
-          withCredentials: true
+          withCredentials: true,
         });
-        this.bookCount = response.data.count;
+        const count = response.data.count;
+        this.totalPages = Math.ceil(count / this.pageSize); // 计算总页数
       } catch (error) {
-        console.error('Error fetching book count:', error);
+        console.error('Error fetching books count:', error);
       }
     },
     async fetchBooks() {
+      await this.fetchBooksCount();
       try {
         const response = await axios.get(`${process.env.VUE_APP_BACKEND_URL}/book/list`, {
-          withCredentials: true
+          params: {
+            page: this.currentPage,
+            pageSize: this.pageSize,
+          },
+          withCredentials: true,
         });
         this.books = response.data.books;
       } catch (error) {
@@ -74,6 +85,7 @@ export default {
     },
     async searchBooks() {
       if (this.searchQuery.trim()) {
+        this.showPagination = false;
         try {
           const response = await axios.get(`${process.env.VUE_APP_BACKEND_URL}/book/search`, {
             params: { query: this.searchQuery },
@@ -84,21 +96,25 @@ export default {
           console.error('Error searching books:', error);
         }
       } else {
+        this.showPagination = true;
+        this.currentPage = 1;
         this.fetchBooks();
       }
-    }
+    },
+    handlePageChange(page) {
+      this.currentPage = parseInt(page, 10); // 转换为数字
+      this.fetchBooks();
+    },
   },
   created() {
-    this.fetchBookCount();
     this.fetchBooks();
-  }
+  },
 };
 </script>
 
 <style scoped>
 .home-container {
   margin: 20px;
-  max-height: 100%;
 }
 
 .personal-center-link {

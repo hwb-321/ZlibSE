@@ -71,8 +71,8 @@ def count_book(request):
 @login_required
 def list_book(request):
     # 获取查询参数
-    page = request.GET.get('page', 1)  # 默认为第1页
-    pageSize = request.GET.get('pageSize', 10)  # 默认每页10条记录
+    page = int(request.GET.get('page', 1))  # 确保页码是整数
+    pageSize = int(request.GET.get('pageSize', 10))  # 确保页数大小是整数
 
     # 获取所有书籍并分页
     books = Book.objects.all()
@@ -87,10 +87,8 @@ def list_book(request):
     # 将书籍数据转换为字典列表
     books_list = list(books_page.object_list.values())
 
+    # 只返回书籍数据列表
     return JsonResponse({
-        'page': page,
-        'pageSize': pageSize,
-        'totalPages': paginator.num_pages,
         'books': books_list
     })
 

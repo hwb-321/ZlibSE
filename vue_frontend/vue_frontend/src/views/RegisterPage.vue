@@ -1,7 +1,7 @@
 <template>
     <v-container class="fill-height" fluid>
         <v-row align="center" justify="center">
-            <v-col cols="12" sm="8" md="4">
+            <v-col cols="12" sm="8" md="6">
                 <v-card class="elevation-12">
                     <v-toolbar color="primary" dark flat>
                         <v-toolbar-title>注册</v-toolbar-title>
@@ -39,7 +39,9 @@
                             <v-icon icon="mdi-open-in-new" right />
                         </v-btn>
                     </v-card-actions>
-                    <v-alert v-if="message" type="error" class="mt-4">{{ message }}</v-alert>
+                    <v-alert v-if="message" :type="messageType" class="mt-4">
+                        {{ message }}
+                    </v-alert>
                 </v-card>
             </v-col>
         </v-row>
@@ -69,6 +71,7 @@ export default {
         async register() {
             if (this.user.password !== this.passwordConfirm) {
                 this.message = '密码不匹配';
+                this.messageType = 'error';
                 return;
             }
             try {
@@ -88,13 +91,16 @@ export default {
 
                 if (response.data.success) {
                     this.message = '注册成功';
-                    setTimeout(() => this.$router.push('/'), 2000); // 2秒后跳转到登录页面
+                    this.messageType = 'success';  // 设置消息类型为成功
+                    setTimeout(() => this.$router.push('/'), 2000);
                 } else {
                     this.message = response.data.message || '注册失败，请重试';
+                    this.messageType = 'error';  // 设置消息类型为错误
                 }
             } catch (error) {
                 console.error('注册失败:', error);
                 this.message = '注册失败，请重试';
+                this.messageType = 'error';
             }
         },
         openLoginPage() {

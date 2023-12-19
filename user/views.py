@@ -50,11 +50,17 @@ def login_user(request):
         captcha_key = request.POST.get('captcha_key')
         captcha_value = request.POST.get('captcha_value')
 
-        # 检查验证码是否正确
+        # 无论登录是否成功，首先验证并删除验证码
+        captcha_valid = False
         try:
-            captcha = CaptchaStore.objects.get(response=captcha_value, hashkey=captcha_key)
+            captcha = CaptchaStore.objects.get(hashkey=captcha_key)
+            if captcha.response == captcha_value.lower():
+                captcha_valid = True
             captcha.delete()  # 删除已经使用的验证码
         except CaptchaStore.DoesNotExist:
+            captcha_valid = False
+
+        if not captcha_valid:
             return JsonResponse({'success': False, 'error': 'Invalid captcha'})
 
         # 检查用户是否已达到登录尝试限制
@@ -83,35 +89,34 @@ def logout_user(request):
     return JsonResponse({'success': True})
 
 
+@require_http_methods(["POST"])
 def register_user(request):
-    if request.method == 'POST':
-        try:
-            data = json.loads(request.body)
+    captcha_key = request.POST.get('captcha_key')
+    captcha_value = request.POST.get('captcha_value')
 
-            captcha_key = data.get('captcha_key')
-            captcha_value = data.get('captcha_value')
+    # 验证验证码
+    captcha = CaptchaStore.objects.filter(hashkey=captcha_key).first()
+    if not captcha or not captcha.response == captcha_value.lower():
+        return JsonResponse({'success': False, 'message': '无效的验证码'})
+    captcha.delete()  # 删除已经使用的验证码
 
-            # 验证验证码
-            try:
-                captcha = CaptchaStore.objects.get(hashkey=captcha_key)
-                if not captcha.response == captcha_value.lower():
-                    return JsonResponse({'success': False, 'message': '验证码错误'})
-            except CaptchaStore.DoesNotExist:
-                return JsonResponse({'success': False, 'message': '无效的验证码'})
+    try:
+        username = request.POST.get('username')
+        email = request.POST.get('email')
+        password = request.POST.get('password')
 
-            if User.objects.filter(username=data['username']).exists():
-                return JsonResponse({'success': False, 'message': '用户名已存在'})
+        if User.objects.filter(username=username).exists():
+            return JsonResponse({'success': False, 'message': '用户名已存在'})
 
-            user = User.objects.create(
-                username=data['username'],
-                email=data['email'],
-                password=make_password(data['password'])
-            )
-            user.save()
-            return JsonResponse({'success': True, 'message': '注册成功'})
-        except Exception as e:
-            return JsonResponse({'success': False, 'message': str(e)})
-    return JsonResponse({'success': False, 'message': '只支持 POST 请求'})
+        User.objects.create(
+            username=username,
+            email=email,
+            password=make_password(password)
+        )
+
+        return JsonResponse({'success': True, 'message': '注册成功'})
+    except Exception as e:
+        return JsonResponse({'success': False, 'message': str(e)})
 
 
 @csrf_exempt
@@ -233,11 +238,13 @@ def upload_book_list(request):
 def delete_uploaded_book(request, book_id):
     user = request.user
 
-    # 获取与用户和书籍相关联的 UploadedBook 记录
-    uploaded_book = get_object_or_404(UploadedBook, user=user, book_id=book_id)
-
-    # 获取 Book 实例
-    book = uploaded_book.book
+    # 如果用户是超级管理员，允许删除任意书籍
+    if user.is_superuser:
+        book = get_object_or_404(Book, id=book_id)
+    else:
+        # 对于非超级管理员用户，只能删除自己上传的书籍
+        uploaded_book = get_object_or_404(UploadedBook, user=user, book_id=book_id)
+        book = uploaded_book.book
 
     # 检查并删除文件
     if book.file_path and os.path.exists(book.file_path.path):
@@ -245,8 +252,11 @@ def delete_uploaded_book(request, book_id):
     if book.cover_image_path and os.path.exists(book.cover_image_path.path):
         book.cover_image_path.delete(save=False)
 
-    # 删除 UploadedBook 记录和 Book 记录
-    uploaded_book.delete()
+    # 如果不是超级管理员，则需要删除 UploadedBook 记录
+    if not user.is_superuser:
+        uploaded_book.delete()
+
+    # 删除 Book 记录
     book.delete()
 
     return JsonResponse({'success': True, 'message': '书籍及相关文件已删除'})

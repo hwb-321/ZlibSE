@@ -18,10 +18,12 @@
             <v-text-field label="语言" v-model="book.language" required></v-text-field>
 
             <v-file-input label="封面图片（留空表示不修改）" @change="handleCoverChange" accept="image/*"
-                :placeholder="book.cover_image_path"></v-file-input>
-            <v-file-input label="文件（留空表示不修改）" @change="handleFileChange" :placeholder="book.file_path"></v-file-input>
+                :placeholder="book.cover_image_path ? '封面图片已上传' : '未上传封面图片'" :error-messages="coverErrors"></v-file-input>
+            <v-file-input label="文件（留空表示不修改）" @change="handleFileChange" :placeholder="book.file_path ? '文件已上传' : '未上传文件'"
+                :error-messages="fileErrors"></v-file-input>
 
-            <v-btn type="submit" color="primary" :disabled="!isFormValid">更新</v-btn>
+            <v-btn type="submit" color="primary"
+                :disabled="!isFormValid || fileErrors.length || coverErrors.length">更新</v-btn>
         </v-form>
 
         <v-alert type="error" v-if="errorMessage" class="mt-4">
@@ -53,6 +55,8 @@ export default {
             },
             errorMessage: '',
             successMessage: '',
+            fileErrors: [],
+            coverErrors: [],
         };
     },
     mounted() {
@@ -79,13 +83,29 @@ export default {
             }
         },
         handleFileChange(event) {
-            if (event.target.files.length > 0) {
-                this.book.file_path = event.target.files[0];
+            const file = event.target.files[0];
+            if (file) {
+                if (file.size <= 1024 * 1024 * 1024) {
+                    this.book.file_path = file;
+                    this.fileErrors = [];
+                } else {
+                    this.fileErrors = ['书籍文件大小不能超过1G'];
+                }
+            } else {
+                this.fileErrors = [];
             }
         },
         handleCoverChange(event) {
-            if (event.target.files.length > 0) {
-                this.book.cover_image_path = event.target.files[0];
+            const file = event.target.files[0];
+            if (file) {
+                if (file.size <= 1024 * 1024 * 1024) {
+                    this.book.cover_image_path = file;
+                    this.coverErrors = [];
+                } else {
+                    this.coverErrors = ['封面图片大小不能超过1G'];
+                }
+            } else {
+                this.coverErrors = [];
             }
         },
         async updateBook() {

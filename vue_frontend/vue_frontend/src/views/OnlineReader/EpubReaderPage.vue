@@ -25,6 +25,10 @@ export default {
         };
     },
     mounted() {
+        this.$nextTick(() => {
+            document.title = '在线阅读';
+        });
+
         const bookId = this.$route.query.bookId;
         const bookUrl = `${process.env.VUE_APP_BACKEND_URL}/book/download/${bookId}.epub`;
         this.book = ePub(bookUrl);
@@ -61,8 +65,6 @@ export default {
     display: flex;
     justify-content: center;
     align-items: center;
-    background: #111;
-    color: #ddd;
     overflow: hidden;
 }
 

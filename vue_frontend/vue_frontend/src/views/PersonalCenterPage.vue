@@ -11,9 +11,15 @@
             </v-col>
         </v-row>
 
-        <router-link to="/uploaded-book-management" class="nav-link">我的上传</router-link>
-        <router-link to="/favorites" class="nav-link">收藏夹</router-link>
-        <router-link to="/change-password" class="nav-link">修改密码</router-link>
+        <router-link to="/uploaded-book-management" class="nav-link">
+            <v-btn block color="primary">我的上传</v-btn>
+        </router-link>
+        <router-link to="/favorites" class="nav-link">
+            <v-btn block color="primary">收藏夹</v-btn>
+        </router-link>
+        <router-link to="/change-password" class="nav-link">
+            <v-btn block color="primary">修改密码</v-btn>
+        </router-link>
     </div>
 </template>
   
@@ -37,11 +43,6 @@ export default {
 .nav-link {
     display: block;
     margin-bottom: 10px;
-    padding: 10px;
-    background-color: #0056b3;
-    color: white;
-    text-align: center;
-    border-radius: 5px;
     text-decoration: none;
 }
 </style>

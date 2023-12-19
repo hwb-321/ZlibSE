@@ -17,10 +17,12 @@
             <v-text-field label="年份" v-model="book.year" type="number" required></v-text-field>
             <v-text-field label="语言" v-model="book.language" required></v-text-field>
 
-            <v-file-input label="封面图片" @change="handleCoverChange" accept="image/*"></v-file-input>
-            <v-file-input label="文件" @change="handleFileChange"></v-file-input>
+            <v-file-input label="封面图片" @change="handleCoverChange" accept="image/*"
+                :error-messages="coverErrors"></v-file-input>
+            <v-file-input label="文件" @change="handleFileChange" :error-messages="fileErrors"></v-file-input>
 
-            <v-btn type="submit" color="primary" :disabled="!isFormValid">上传</v-btn>
+            <v-btn type="submit" color="primary"
+                :disabled="!isFormValid || fileErrors.length || coverErrors.length">上传</v-btn>
         </v-form>
 
         <v-alert type="error" v-if="errorMessage" class="mt-4">
@@ -68,10 +70,22 @@ export default {
     },
     methods: {
         handleFileChange(event) {
-            this.file_path = event.target.files[0];
+            const file = event.target.files[0];
+            if (file && file.size > 1024 * 1024 * 1024) { // 大于1GB
+                this.fileErrors = ['书籍大小不能超过1G'];
+            } else {
+                this.file_path = file;
+                this.fileErrors = [];
+            }
         },
         handleCoverChange(event) {
-            this.cover_image_path = event.target.files[0];
+            const file = event.target.files[0];
+            if (file && file.size > 1024 * 1024 * 1024) { // 大于1GB
+                this.coverErrors = ['封面图片大小不能超过1G'];
+            } else {
+                this.cover_image_path = file;
+                this.coverErrors = [];
+            }
         },
         async submitBook() {
             if (!this.isFormValid) {
