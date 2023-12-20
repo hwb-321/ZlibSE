@@ -82,7 +82,7 @@ export default {
                 }
             } catch (error) {
                 console.error('Login error:', error);
-                this.errorMessage = 'Login failed. Please try again.';
+                this.errorMessage = '登陆失败，请重试。';
             }
         },
         async refreshCaptcha() {
@@ -91,7 +91,7 @@ export default {
                 this.captchaKey = response.data.key;
                 this.captchaImageUrl = `${process.env.VUE_APP_BACKEND_URL}${response.data.image_url}`;
             } catch (error) {
-                console.error('Error fetching captcha:', error);
+                console.error('获取验证码错误：', error);
             }
         },
         openRegisterPage() {

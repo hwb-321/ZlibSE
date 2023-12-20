@@ -61,14 +61,14 @@ def login_user(request):
             captcha_valid = False
 
         if not captcha_valid:
-            return JsonResponse({'success': False, 'error': 'Invalid captcha'})
+            return JsonResponse({'success': False, 'error': '验证码错误'})
 
         # 检查用户是否已达到登录尝试限制
         login_attempts = request.session.get('login_attempts', 0)
         last_attempt_time = request.session.get('last_attempt_time', timezone.now())
 
         if login_attempts >= 5 and timezone.now() < last_attempt_time + timedelta(minutes=1):
-            return JsonResponse({'success': False, 'error': 'Too many failed login attempts. Please try again later.'})
+            return JsonResponse({'success': False, 'error': '短期内尝试登陆次数太多，请稍后重试！'})
 
         user = authenticate(username=username, password=password)
         if user is not None:
@@ -80,7 +80,7 @@ def login_user(request):
             request.session['last_attempt_time'] = timezone.now()
             return JsonResponse({'success': False, 'error': 'Invalid credentials'})
 
-    return JsonResponse({'success': False, 'error': 'Invalid request'})
+    return JsonResponse({'success': False, 'error': '不合法的请求'})
 
 
 @login_required
@@ -303,7 +303,7 @@ def change_uploaded_book(request, book_id):
             if 'file_path' in request.FILES:
                 file = request.FILES['file_path']
                 book.file_size = file.size / (1024 * 1024)  # 文件大小转换为MB
-                book.file_type = file.content_type
+                book.file_type = book.file_type = form.cleaned_data['file_type']
                 book.file_path = file
 
             if 'cover_image_path' in request.FILES:

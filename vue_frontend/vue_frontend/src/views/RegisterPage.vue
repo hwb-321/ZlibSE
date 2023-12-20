@@ -116,7 +116,7 @@ export default {
                 this.captchaKey = response.data.key;
                 this.captchaImageUrl = `${process.env.VUE_APP_BACKEND_URL}${response.data.image_url}`;
             } catch (error) {
-                console.error('Error fetching captcha:', error);
+                console.error('获取验证码失败：', error);
             }
         },
     },

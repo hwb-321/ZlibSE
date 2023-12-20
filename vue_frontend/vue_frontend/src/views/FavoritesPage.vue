@@ -73,21 +73,26 @@ export default {
                 console.error('Error fetching favorites:', error);
             }
         },
-        async searchFavorites() {
+        searchFavorites() {
             if (this.searchQuery.trim()) {
-                try {
-                    const response = await axios.get(`${process.env.VUE_APP_BACKEND_URL}/book/search`, {
-                        params: { query: this.searchQuery },
-                        withCredentials: true
-                    });
-                    this.books = response.data.books;
-                } catch (error) {
-                    console.error('Error searching books:', error);
-                }
+                const lowerCaseQuery = this.searchQuery.toLowerCase();
+
+                // 在本地数据中搜索
+                this.uploadedBooks = this.uploadedBooks.filter(book => {
+                    // 检查书籍的每个字段是否包含搜索词
+                    return book.title.toLowerCase().includes(lowerCaseQuery) ||
+                        book.author.toLowerCase().includes(lowerCaseQuery) ||
+                        book.isbn.toLowerCase().includes(lowerCaseQuery) ||
+                        book.category.toLowerCase().includes(lowerCaseQuery) ||
+                        book.year.toString().toLowerCase().includes(lowerCaseQuery) ||
+                        book.language.toLowerCase().includes(lowerCaseQuery) ||
+                        book.file_type.toLowerCase().includes(lowerCaseQuery);
+                });
             } else {
-                this.fetchFavorites();
+                // 如果搜索词为空，则重新获取所有书籍
+                this.fetchUploadedBooks();
             }
-        }
+        },
     },
     created() {
         this.fetchFavorites();
