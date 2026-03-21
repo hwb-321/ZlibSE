@@ -1,6 +1,6 @@
-__pycache__/
+node_modules/
+dist/
+.env.local
+.env.*.local
 .idea/
-media/
-vue_frontend/vue_frontend/node_modules
-vue_frontend/vue_frontend/dist
 .venv/

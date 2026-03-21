@@ -1,16 +1,10 @@
-# ZlibSE Frontend Branch
+# ZlibSE Frontend
 
-This branch is reserved for frontend development.
+Vue frontend for the ZlibSE project.
 
-## Scope
-
-- Frontend source lives in `vue_frontend/vue_frontend/`
-- Backend code should be developed on the `main` branch
-
-## Run
+## Development
 
 ```bash
-cd vue_frontend/vue_frontend
 npm install
 npm run serve
 ```
@@ -18,12 +12,11 @@ npm run serve
 ## Build
 
 ```bash
-cd vue_frontend/vue_frontend
 npm run build
 ```
 
 ## Notes
 
-- The current frontend is built with Vue CLI
-- Development environment variables are stored in `vue_frontend/vue_frontend/.env.development`
-- Production environment variables are stored in `vue_frontend/vue_frontend/.env.production`
+- This branch keeps frontend code only
+- Backend code is maintained on the `main` branch
+- Environment variables are defined in `.env.development` and `.env.production`
