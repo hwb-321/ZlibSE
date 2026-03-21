@@ -5,11 +5,10 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from .config import get_settings
 from .database import Base, engine
-from .paths import MEDIA_DIR, STATIC_DIR, ensure_runtime_dirs
+from .paths import MEDIA_DIR, ensure_runtime_dirs
 from ..routers.auth import router as auth_router
 from ..routers.books import router as books_router
 from ..routers.favorites import router as favorites_router
-from ..routers.spa import router as spa_router
 from ..routers.uploads import router as uploads_router
 
 
@@ -35,11 +34,8 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-
     if MEDIA_DIR.exists():
         app.mount("/media", StaticFiles(directory=str(MEDIA_DIR)), name="media")
-    if STATIC_DIR.exists():
-        app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
     @app.on_event("startup")
     def startup_event() -> None:
@@ -49,5 +45,4 @@ def create_app() -> FastAPI:
     app.include_router(books_router)
     app.include_router(favorites_router)
     app.include_router(uploads_router)
-    app.include_router(spa_router)
     return app
