@@ -28,7 +28,6 @@ def search_books(db: Session, query: str) -> list[Book]:
                 Book.isbn.ilike(pattern),
                 Book.category.ilike(pattern),
                 Book.language.ilike(pattern),
-                Book.file_type.ilike(pattern),
             )
         )
         .all()

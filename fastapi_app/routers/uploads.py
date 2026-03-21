@@ -1,6 +1,4 @@
-import os
-
-from fastapi import APIRouter, Depends, File, Form, UploadFile
+from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
@@ -9,7 +7,7 @@ from ..core.deps import get_current_user
 from ..models import UploadedBook, User, UserCollectedBook
 from ..repositories.book_repository import get_book
 from ..repositories.upload_repository import get_upload_relation, list_uploaded_books
-from ..services.book_service import book_to_dict, update_book_record
+from ..services.book_service import book_to_dict, delete_book_files
 
 router = APIRouter(tags=["uploads"])
 
@@ -28,60 +26,16 @@ def delete_uploaded_book(
 ):
     book = get_book(db, book_id)
     if not book:
-        return JSONResponse({"success": False, "message": "?????"}, status_code=404)
+        return JSONResponse({"success": False, "message": "书籍不存在"}, status_code=404)
 
     if not current_user.is_superuser:
         own_upload = get_upload_relation(db, current_user.id, book_id)
         if not own_upload:
-            return JSONResponse({"success": False, "message": "???????"}, status_code=403)
-
-    if book.file_path and os.path.exists(book.file_path):
-        os.remove(book.file_path)
-    if book.cover_image_path and os.path.exists(book.cover_image_path):
-        os.remove(book.cover_image_path)
+            return JSONResponse({"success": False, "message": "无权删除此书籍"}, status_code=403)
 
     db.query(UserCollectedBook).filter(UserCollectedBook.book_id == book_id).delete()
     db.query(UploadedBook).filter(UploadedBook.book_id == book_id).delete()
+    delete_book_files(db, book)
     db.delete(book)
     db.commit()
-    return {"success": True, "message": "??????????"}
-
-
-@router.post("/user/change_uploaded_book/{book_id}")
-def change_uploaded_book(
-    book_id: int,
-    title: str = Form(...),
-    author: str = Form(...),
-    isbn: str = Form(...),
-    category: str = Form(...),
-    year: int = Form(...),
-    language: str = Form(...),
-    file_path: UploadFile = File(None),
-    cover_image_path: UploadFile = File(None),
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    book = get_book(db, book_id)
-    if not book:
-        return JSONResponse({"success": False, "message": "?????"}, status_code=404)
-
-    if not current_user.is_superuser:
-        own_upload = get_upload_relation(db, current_user.id, book_id)
-        if not own_upload:
-            return JSONResponse({"success": False, "message": "?????????????"}, status_code=403)
-
-    update_book_record(
-        book=book,
-        title=title,
-        author=author,
-        isbn=isbn,
-        category=category,
-        year=year,
-        language=language,
-        file_path=file_path,
-        cover_image_path=cover_image_path,
-    )
-
-    db.add(book)
-    db.commit()
-    return {"success": True, "message": "????????"}
+    return {"success": True, "message": "书籍及相关文件已删除"}

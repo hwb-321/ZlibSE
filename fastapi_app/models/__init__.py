@@ -1,4 +1,4 @@
-from .book import Book, UploadedBook, UserCollectedBook
+from .book import Book, StoredFile, UploadedBook, UserCollectedBook
 from .user import User
 
-__all__ = ["Book", "UploadedBook", "User", "UserCollectedBook"]
+__all__ = ["Book", "StoredFile", "UploadedBook", "User", "UserCollectedBook"]

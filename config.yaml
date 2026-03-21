@@ -1,29 +1,49 @@
-# Development server settings.
-# `host` controls which network interface the FastAPI server binds to.
-# Use `127.0.0.1` for local-only access, or `0.0.0.0` if you want other devices
-# on the same network to reach your machine during development.
+# 后端服务启动配置。
 server:
-  host: 127.0.0.1
-  # `port` is the HTTP port used by the backend service in development.
+  # 监听地址。设置为 0.0.0.0 后，可以同时通过 localhost、127.0.0.1、局域网 IP、DDNS 域名访问。
+  host: 0.0.0.0
+  # 后端 HTTP 服务端口。
   port: 8000
-  # `reload` enables hot reload for code changes and should stay true in development.
+  # 开发环境下是否开启热重载。
   reload: true
 
-# Security settings used by the backend in development.
+# 安全相关配置。
 security:
-  # `session_secret` is used to sign session data.
-  # Replace this with a private random string before sharing the environment.
+  # Session 签名密钥。
   session_secret: dev-session-secret-change-me
 
-# Database settings for local development.
+# 数据库配置。
 database:
-  # `sqlite_path` can be a relative path under the repository root
-  # or an absolute path on disk.
+  # SQLite 文件路径。相对路径默认以仓库根目录为基准。
   sqlite_path: zlibse.db
 
-# Cross-origin settings for local frontend/backend development.
+# 跨域配置。
 cors:
-  # `allow_origins` lists frontend origins allowed to call the backend.
+  # 允许访问后端接口的前端来源地址。
   allow_origins:
     - http://localhost:8080
     - http://127.0.0.1:8080
+    - http://4070s-linux.xinghen.ip-ddns.com:8080
+
+# 对象存储配置。
+storage:
+  # 当前存储提供商。当前实现使用腾讯云 COS 的 S3 兼容接口。
+  provider: cos
+  # 存储桶名称。
+  bucket: zlibse-1313357152
+  # 存储桶地域。
+  region: ap-beijing
+  # COS 的 S3 兼容接入点。这里使用 region 级 endpoint，并通过 virtual-hosted-style 访问桶。
+  endpoint: https://cos.ap-beijing.myqcloud.com
+  # 访问密钥 ID。
+  secret_id: AKIDru6CAADWM1oMrGVlJm8NSNCtSr7IQWUT
+  # 访问密钥 Key。
+  secret_key: qdIl2BAyhEajuBHE0cBi3BKYkIhw0w9D
+  # 预签名上传链接有效期，单位秒。
+  upload_expires: 900
+  # 预签名下载链接有效期，单位秒。
+  download_expires: 300
+  # 正文文件对象 key 前缀。
+  book_prefix: books
+  # 封面文件对象 key 前缀。
+  cover_prefix: covers

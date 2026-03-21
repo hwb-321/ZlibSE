@@ -4,16 +4,13 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
 from .config import get_settings
-from .database import Base, engine
 from .paths import MEDIA_DIR, ensure_runtime_dirs
+from .schema import init_schema
 from ..routers.auth import router as auth_router
 from ..routers.books import router as books_router
 from ..routers.favorites import router as favorites_router
+from ..routers.files import router as files_router
 from ..routers.uploads import router as uploads_router
-
-
-def init_db() -> None:
-    Base.metadata.create_all(bind=engine)
 
 
 def create_app() -> FastAPI:
@@ -39,10 +36,11 @@ def create_app() -> FastAPI:
 
     @app.on_event("startup")
     def startup_event() -> None:
-        init_db()
+        init_schema()
 
     app.include_router(auth_router)
     app.include_router(books_router)
     app.include_router(favorites_router)
+    app.include_router(files_router)
     app.include_router(uploads_router)
     return app

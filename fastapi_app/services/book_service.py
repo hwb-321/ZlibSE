@@ -1,112 +1,196 @@
-import os
+from __future__ import annotations
+
 from pathlib import Path
 
 from fastapi import UploadFile
+from sqlalchemy.orm import Session
 
-from ..core.paths import BOOKS_DIR, COVERS_DIR
-from ..models import Book
-from .storage_service import save_upload_file
+from ..models import Book, StoredFile
+from ..repositories.file_repository import create_file_record, get_file
+from .storage_service import delete_object, upload_upload_file
+
+
+def _file_ext(filename: str) -> str:
+    return Path(filename or "").suffix.lstrip(".").lower()
+
+
+def _size_to_mb(size: int) -> float:
+    return round(size / (1024 * 1024), 2) if size else 0.0
+
+
+def _ensure_required_upload(upload: UploadFile | None, field_name: str) -> UploadFile:
+    if upload is None:
+        raise ValueError(f"{field_name} is required")
+    return upload
+
+
+def _persist_uploaded_file(db: Session, upload: UploadFile, kind: str) -> StoredFile:
+    payload = upload_upload_file(upload, kind)
+    return create_file_record(db, **payload)
+
+
+def _validate_file_refs(db: Session, book_file_id: int, cover_file_id: int | None) -> tuple[StoredFile, StoredFile | None]:
+    book_file = get_file(db, book_file_id)
+    if not book_file:
+        raise ValueError("bookFileId does not exist")
+    if book_file.kind != "book":
+        raise ValueError("bookFileId must point to a book file")
+
+    cover_file = None
+    if cover_file_id is not None:
+        cover_file = get_file(db, cover_file_id)
+        if not cover_file:
+            raise ValueError("coverFileId does not exist")
+        if cover_file.kind != "cover":
+            raise ValueError("coverFileId must point to a cover file")
+
+    return book_file, cover_file
 
 
 def book_to_dict(book: Book) -> dict:
+    book_file = book.book_file
+    cover_file = book.cover_file
     return {
         "id": book.id,
         "title": book.title,
-        "author": book.author,
-        "isbn": book.isbn,
-        "category": book.category,
+        "author": book.author or "",
+        "isbn": book.isbn or "",
+        "category": book.category or "",
         "year": book.year,
-        "language": book.language,
-        "file_type": book.file_type,
-        "file_path": f"/media/books/{Path(book.file_path).name}" if book.file_path else "",
-        "file_size": book.file_size,
-        "cover_image_path": f"/media/covers/{Path(book.cover_image_path).name}" if book.cover_image_path else "",
+        "language": book.language or "",
+        "file_type": _file_ext(book_file.original_filename),
+        "file_size": _size_to_mb(book_file.size),
+        "book_file_id": book.book_file_id,
+        "cover_file_id": book.cover_file_id,
+        "file_path": f"/api/files/{book.book_file_id}/download-url",
+        "cover_image_path": f"/api/files/{book.cover_file_id}/content?download=false" if cover_file else "",
     }
 
 
 def build_book_detail(book: Book) -> dict:
-    return {
-        "title": book.title,
-        "author": book.author,
-        "isbn": book.isbn,
-        "category": book.category,
-        "year": book.year,
-        "language": book.language,
-        "file_type": book.file_type,
-        "file_path": f"/media/books/{Path(book.file_path).name}" if book.file_path else "",
-        "file_size": book.file_size,
-        "cover_image_path": f"/media/covers/{Path(book.cover_image_path).name}" if book.cover_image_path else "",
-    }
+    return book_to_dict(book)
 
 
 def create_book_record(
+    db: Session,
+    *,
     title: str,
-    author: str,
-    isbn: str,
-    category: str,
-    year: int,
-    language: str,
+    author: str | None,
+    isbn: str | None,
+    category: str | None,
+    year: int | None,
+    language: str | None,
     file_path: UploadFile,
     cover_image_path: UploadFile | None,
 ) -> Book:
-    file_bytes = file_path.file.read()
-    file_path.file.seek(0)
-    file_size = len(file_bytes)
-    if file_size > 1024 * 1024 * 1024:
-        raise ValueError("????????1GB")
+    main_upload = _ensure_required_upload(file_path, "file")
+    book_file = _persist_uploaded_file(db, main_upload, "book")
+    cover_file = _persist_uploaded_file(db, cover_image_path, "cover") if cover_image_path else None
 
-    file_name, saved_file = save_upload_file(file_path, BOOKS_DIR)
-    cover_saved = None
-    if cover_image_path:
-        _, cover_saved = save_upload_file(cover_image_path, COVERS_DIR)
-
-    ext = Path(file_name).suffix.lstrip(".").lower()
     return Book(
         title=title,
-        author=author,
-        isbn=isbn,
-        category=category,
+        author=author or None,
+        isbn=isbn or None,
+        category=category or None,
         year=year,
-        language=language,
-        file_type=ext,
-        file_path=saved_file,
-        file_size=round(file_size / (1024 * 1024), 2),
-        cover_image_path=cover_saved,
+        language=language or None,
+        book_file_id=book_file.id,
+        cover_file_id=cover_file.id if cover_file else None,
+    )
+
+
+def create_book_from_file_ids(
+    db: Session,
+    *,
+    title: str,
+    author: str | None,
+    isbn: str | None,
+    category: str | None,
+    year: int | None,
+    language: str | None,
+    book_file_id: int,
+    cover_file_id: int | None,
+) -> Book:
+    _validate_file_refs(db, book_file_id, cover_file_id)
+    return Book(
+        title=title,
+        author=author or None,
+        isbn=isbn or None,
+        category=category or None,
+        year=year,
+        language=language or None,
+        book_file_id=book_file_id,
+        cover_file_id=cover_file_id,
     )
 
 
 def update_book_record(
+    db: Session,
+    *,
     book: Book,
     title: str,
-    author: str,
-    isbn: str,
-    category: str,
-    year: int,
-    language: str,
+    author: str | None,
+    isbn: str | None,
+    category: str | None,
+    year: int | None,
+    language: str | None,
     file_path: UploadFile | None,
     cover_image_path: UploadFile | None,
 ) -> Book:
     book.title = title
-    book.author = author
-    book.isbn = isbn
-    book.category = category
+    book.author = author or None
+    book.isbn = isbn or None
+    book.category = category or None
     book.year = year
-    book.language = language
+    book.language = language or None
 
     if file_path:
-        if book.file_path and os.path.exists(book.file_path):
-            os.remove(book.file_path)
-        file_name, saved_file = save_upload_file(file_path, BOOKS_DIR)
-        ext = Path(file_name).suffix.lstrip(".").lower()
-        size_bytes = os.path.getsize(saved_file)
-        book.file_type = ext
-        book.file_path = saved_file
-        book.file_size = round(size_bytes / (1024 * 1024), 2)
+        old_file = book.book_file
+        new_file = _persist_uploaded_file(db, file_path, "book")
+        book.book_file_id = new_file.id
+        if old_file:
+            delete_object(old_file)
+            db.delete(old_file)
 
     if cover_image_path:
-        if book.cover_image_path and os.path.exists(book.cover_image_path):
-            os.remove(book.cover_image_path)
-        _, cover_saved = save_upload_file(cover_image_path, COVERS_DIR)
-        book.cover_image_path = cover_saved
+        old_cover = book.cover_file
+        new_cover = _persist_uploaded_file(db, cover_image_path, "cover")
+        book.cover_file_id = new_cover.id
+        if old_cover:
+            delete_object(old_cover)
+            db.delete(old_cover)
 
     return book
+
+
+def update_book_from_file_ids(
+    db: Session,
+    *,
+    book: Book,
+    title: str,
+    author: str | None,
+    isbn: str | None,
+    category: str | None,
+    year: int | None,
+    language: str | None,
+    book_file_id: int,
+    cover_file_id: int | None,
+) -> Book:
+    _validate_file_refs(db, book_file_id, cover_file_id)
+    book.title = title
+    book.author = author or None
+    book.isbn = isbn or None
+    book.category = category or None
+    book.year = year
+    book.language = language or None
+    book.book_file_id = book_file_id
+    book.cover_file_id = cover_file_id
+    return book
+
+
+def delete_book_files(db: Session, book: Book) -> None:
+    for stored_file in [book.book_file, book.cover_file]:
+        if stored_file is None:
+            continue
+        delete_object(stored_file)
+        db.delete(stored_file)

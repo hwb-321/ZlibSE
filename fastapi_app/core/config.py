@@ -15,7 +15,7 @@ DEFAULT_CONFIG_PATH = ROOT_DIR / "config.yaml"
 
 @dataclass(frozen=True)
 class ServerConfig:
-    host: str = "127.0.0.1"
+    host: str = "0.0.0.0"
     port: int = 8000
     reload: bool = False
 
@@ -31,10 +31,25 @@ class DatabaseConfig:
 
 
 @dataclass(frozen=True)
+class StorageConfig:
+    provider: str
+    bucket: str
+    region: str
+    endpoint: str
+    secret_id: str
+    secret_key: str
+    upload_expires: int
+    download_expires: int
+    book_prefix: str
+    cover_prefix: str
+
+
+@dataclass(frozen=True)
 class AppConfig:
     server: ServerConfig
     security: SecurityConfig
     database: DatabaseConfig
+    storage: StorageConfig
     cors_allow_origins: list[str]
 
 
@@ -64,10 +79,11 @@ def get_settings() -> AppConfig:
     server_raw = raw.get("server") or {}
     security_raw = raw.get("security") or {}
     database_raw = raw.get("database") or {}
+    storage_raw = raw.get("storage") or {}
     cors_raw = raw.get("cors") or {}
 
     server = ServerConfig(
-        host=str(server_raw.get("host", "127.0.0.1")),
+        host=str(server_raw.get("host", "0.0.0.0")),
         port=int(server_raw.get("port", 8000)),
         reload=bool(server_raw.get("reload", False)),
     )
@@ -79,17 +95,31 @@ def get_settings() -> AppConfig:
             )
         )
     )
+
     sqlite_path = Path(database_raw.get("sqlite_path", "zlibse.db"))
     if not sqlite_path.is_absolute():
         sqlite_path = ROOT_DIR / sqlite_path
     database = DatabaseConfig(sqlite_path=sqlite_path)
+
+    storage = StorageConfig(
+        provider=str(storage_raw.get("provider", "cos")),
+        bucket=str(storage_raw.get("bucket", "")),
+        region=str(storage_raw.get("region", "ap-beijing")),
+        endpoint=str(storage_raw.get("endpoint", "https://cos.ap-beijing.myqcloud.com")),
+        secret_id=str(storage_raw.get("secret_id", "")),
+        secret_key=str(storage_raw.get("secret_key", "")),
+        upload_expires=int(storage_raw.get("upload_expires", 900)),
+        download_expires=int(storage_raw.get("download_expires", 300)),
+        book_prefix=str(storage_raw.get("book_prefix", "books")),
+        cover_prefix=str(storage_raw.get("cover_prefix", "covers")),
+    )
 
     cors_allow_origins = _as_str_list(
         cors_raw.get("allow_origins"),
         [
             "http://localhost:8080",
             "http://127.0.0.1:8080",
-            "http://192.168.157.177:8080",
+            "http://4070s-linux.xinghen.ip-ddns.com:8080",
         ],
     )
 
@@ -97,5 +127,6 @@ def get_settings() -> AppConfig:
         server=server,
         security=security,
         database=database,
+        storage=storage,
         cors_allow_origins=cors_allow_origins,
     )
