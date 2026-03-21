@@ -23,6 +23,7 @@ class ServerConfig:
 @dataclass(frozen=True)
 class SecurityConfig:
     session_secret: str = "dev-session-secret-change-me"
+    captcha_enabled: bool = True
 
 
 @dataclass(frozen=True)
@@ -93,7 +94,8 @@ def get_settings() -> AppConfig:
                 "SESSION_SECRET",
                 security_raw.get("session_secret", "dev-session-secret-change-me"),
             )
-        )
+        ),
+        captcha_enabled=bool(security_raw.get("captcha_enabled", True)),
     )
 
     sqlite_path = Path(database_raw.get("sqlite_path", "zlibse.db"))

@@ -11,6 +11,8 @@ server:
 security:
   # Session 签名密钥。
   session_secret: dev-session-secret-change-me
+  # 是否启用登录/注册验证码。
+  captcha_enabled: false
 
 # 数据库配置。
 database:

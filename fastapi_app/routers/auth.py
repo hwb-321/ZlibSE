@@ -9,14 +9,22 @@ from ..core.deps import get_current_user
 from ..core.security import hash_password, verify_password
 from ..models import User
 from ..repositories.user_repository import get_user_by_username
-from ..services.captcha_service import generate_captcha_payload, render_captcha_image, validate_captcha
+from ..services.captcha_service import (
+    generate_captcha_payload,
+    is_captcha_enabled,
+    render_captcha_image,
+    validate_captcha,
+)
 
 router = APIRouter(tags=["auth"])
 
 
 @router.get("/user/init_csrf")
 def init_csrf() -> dict:
-    return {"detail": "CSRF cookie set"}
+    return {
+        "detail": "CSRF cookie set",
+        "captchaEnabled": is_captcha_enabled(),
+    }
 
 
 @router.get("/user/generate_captcha")
@@ -37,8 +45,8 @@ def register_user(
     username: str = Form(...),
     email: str = Form(""),
     password: str = Form(...),
-    captcha_key: str = Form(...),
-    captcha_value: str = Form(...),
+    captcha_key: str = Form(""),
+    captcha_value: str = Form(""),
     db: Session = Depends(get_db),
 ):
     if not validate_captcha(captcha_key, captcha_value, consume=True):
@@ -64,8 +72,8 @@ def login_user(
     request: Request,
     username: str = Form(...),
     password: str = Form(...),
-    captcha_key: str = Form(...),
-    captcha_value: str = Form(...),
+    captcha_key: str = Form(""),
+    captcha_value: str = Form(""),
     db: Session = Depends(get_db),
 ):
     if not validate_captcha(captcha_key, captcha_value, consume=True):
@@ -96,7 +104,10 @@ def logout_user(request: Request):
 
 @router.get("/user/check_session")
 def check_session(request: Request):
-    return {"isLoggedIn": bool(request.session.get("user_id"))}
+    return {
+        "isLoggedIn": bool(request.session.get("user_id")),
+        "captchaEnabled": is_captcha_enabled(),
+    }
 
 
 @router.post("/user/change_password_user")
