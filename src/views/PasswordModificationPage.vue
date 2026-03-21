@@ -32,6 +32,7 @@
   
 <script>
 import axios from 'axios';
+import appConfig from '@/config/appConfig.json';
 
 export default {
     data() {
@@ -62,7 +63,7 @@ export default {
                 formData.append('current_password', this.passwords.current);
                 formData.append('new_password', this.passwords.new);
                 // 发送请求
-                axios.post(`${process.env.VUE_APP_BACKEND_URL}/user/change_password_user`, formData, {
+                axios.post(`${appConfig.backendUrl}/user/change_password_user`, formData, {
                     withCredentials: true
                 })
                     .then(response => {

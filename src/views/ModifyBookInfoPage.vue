@@ -38,6 +38,7 @@
   
 <script>
 import axios from 'axios';
+import appConfig from '@/config/appConfig.json';
 
 export default {
     data() {
@@ -75,7 +76,7 @@ export default {
         async fetchBookData() {
             try {
                 const bookId = this.$route.params.bookId; // 从路由获取bookId
-                const response = await axios.get(`${process.env.VUE_APP_BACKEND_URL}/book/get_descriptions/${bookId}`, { withCredentials: true });
+                const response = await axios.get(`${appConfig.backendUrl}/book/get_descriptions/${bookId}`, { withCredentials: true });
                 this.book = { ...response.data };
             } catch (error) {
                 this.errorMessage = '加载书籍数据失败';
@@ -129,7 +130,7 @@ export default {
                 }
 
                 const bookId = this.$route.params.bookId;
-                await axios.post(`${process.env.VUE_APP_BACKEND_URL}/user/change_uploaded_book/${bookId}`, formData, {
+                await axios.post(`${appConfig.backendUrl}/user/change_uploaded_book/${bookId}`, formData, {
                     headers: {
                         'Content-Type': 'multipart/form-data'
                     },

@@ -34,6 +34,7 @@
   
 <script>
 import axios from 'axios';
+import appConfig from '@/config/appConfig.json';
 import BookCardWithDelete from '../components/BookCardWithDelete.vue';
 
 export default {
@@ -58,7 +59,7 @@ export default {
         },
         async fetchUploadedBooks() {
             try {
-                const response = await axios.get(`${process.env.VUE_APP_BACKEND_URL}/user/get_upload_book_list`, {
+                const response = await axios.get(`${appConfig.backendUrl}/user/get_upload_book_list`, {
                     withCredentials: true
                 });
                 this.uploadedBooks = response.data.uploadedBooks;

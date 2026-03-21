@@ -34,6 +34,7 @@
 
 <script>
 import axios from 'axios';
+import appConfig from '@/config/appConfig.json';
 import BookCard from '../components/BookCard.vue';
 
 export default {
@@ -59,7 +60,7 @@ export default {
   methods: {
     async fetchBooksCount() {
       try {
-        const response = await axios.get(`${process.env.VUE_APP_BACKEND_URL}/book/count`, {
+        const response = await axios.get(`${appConfig.backendUrl}/book/count`, {
           withCredentials: true,
         });
         const count = response.data.count;
@@ -71,7 +72,7 @@ export default {
     async fetchBooks() {
       await this.fetchBooksCount();
       try {
-        const response = await axios.get(`${process.env.VUE_APP_BACKEND_URL}/book/list`, {
+        const response = await axios.get(`${appConfig.backendUrl}/book/list`, {
           params: {
             page: this.currentPage,
             pageSize: this.pageSize,
@@ -87,7 +88,7 @@ export default {
       if (this.searchQuery.trim()) {
         this.showPagination = false;
         try {
-          const response = await axios.get(`${process.env.VUE_APP_BACKEND_URL}/book/search`, {
+          const response = await axios.get(`${appConfig.backendUrl}/book/search`, {
             params: { query: this.searchQuery },
             withCredentials: true
           });

@@ -1,3 +1,5 @@
+import appConfig from '@/config/appConfig.json';
+
 export function getCookie(name) {
     let cookieValue = null;
     if (document.cookie && document.cookie !== '') {
@@ -14,5 +16,5 @@ export function getCookie(name) {
 }
 
 export function getCoverUrl(bookId) {
-    return `${process.env.VUE_APP_BACKEND_URL}/book/cover/${bookId}`;
+    return `${appConfig.backendUrl}/book/cover/${bookId}`;
 }

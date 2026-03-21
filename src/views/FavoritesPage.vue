@@ -30,6 +30,7 @@
   
 <script>
 import axios from 'axios';
+import appConfig from '@/config/appConfig.json';
 import BookCard from '../components/BookCard.vue';
 
 export default {
@@ -64,7 +65,7 @@ export default {
         },
         async fetchFavorites() {
             try {
-                const response = await axios.get(`${process.env.VUE_APP_BACKEND_URL}/user/favorites`, {
+                const response = await axios.get(`${appConfig.backendUrl}/user/favorites`, {
                     withCredentials: true
                 });
                 console.log(response.data);

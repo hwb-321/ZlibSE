@@ -13,6 +13,7 @@
 <script>
 import BookCard from './BookCard.vue'; // 假设 BookCard 在同一目录下\
 import axios from 'axios';
+import appConfig from '@/config/appConfig.json';
 
 export default {
     components: {
@@ -27,7 +28,7 @@ export default {
     methods: {
         async deleteBook(bookId) {
             try {
-                const response = await axios.post(`${process.env.VUE_APP_BACKEND_URL}/user/delete_uploaded_book/${bookId}`, {}, { withCredentials: true });
+                const response = await axios.post(`${appConfig.backendUrl}/user/delete_uploaded_book/${bookId}`, {}, { withCredentials: true });
                 if (response.data.success) {
                     this.$emit('bookDeleted', bookId);
                 }

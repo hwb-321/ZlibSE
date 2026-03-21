@@ -3,6 +3,7 @@ import App from './App.vue';
 import router from './router';
 import { getCookie, getCoverUrl } from '@/utils/utils';
 import axios from 'axios';
+import appConfig from '@/config/appConfig.json';
 import 'vuetify/styles'
 import { createVuetify } from 'vuetify'
 import * as components from 'vuetify/components'
@@ -18,7 +19,7 @@ const axiosInstance = axios.create();
 
 axios.interceptors.request.use(async (config) => {
     if (!document.cookie.includes('csrftoken')) {
-        await axiosInstance.get(`${process.env.VUE_APP_BACKEND_URL}/user/init_csrf`, { withCredentials: true });
+        await axiosInstance.get(`${appConfig.backendUrl}/user/init_csrf`, { withCredentials: true });
         console.log('已成功获取csrf令牌');
         config.headers['X-CSRFToken'] = getCookie('csrftoken');
     } else {

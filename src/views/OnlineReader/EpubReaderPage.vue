@@ -14,6 +14,7 @@
   
 <script>
 import ePub from 'epubjs';
+import appConfig from '@/config/appConfig.json';
 
 export default {
     data() {
@@ -30,7 +31,7 @@ export default {
         });
 
         const bookId = this.$route.query.bookId;
-        const bookUrl = `${process.env.VUE_APP_BACKEND_URL}/book/download/${bookId}.epub`;
+        const bookUrl = `${appConfig.backendUrl}/book/download/${bookId}.epub`;
         this.book = ePub(bookUrl);
         this.rendition = this.book.renderTo(this.$refs.book, { width: '100%', height: '100%' });
         this.rendition.display();

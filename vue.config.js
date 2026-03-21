@@ -1,10 +1,13 @@
 const { defineConfig } = require('@vue/cli-service');
+const appConfig = require('./src/config/appConfig.json');
 
 module.exports = defineConfig({
   transpileDependencies: true,
-  publicPath: process.env.NODE_ENV === 'production'
-    ? '/'  // 生产环境下的公共路径
-    : '/',        // 开发环境下的公共路径
-
-  assetsDir: 'static',
+  publicPath: appConfig.build.publicPath,
+  assetsDir: appConfig.build.assetsDir,
+  devServer: {
+    host: appConfig.devServer.host,
+    port: appConfig.devServer.port,
+    allowedHosts: appConfig.devServer.allowedHosts,
+  },
 });

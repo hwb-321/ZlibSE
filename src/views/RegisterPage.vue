@@ -51,6 +51,7 @@
   
 <script>
 import axios from 'axios';
+import appConfig from '@/config/appConfig.json';
 
 export default {
     data() {
@@ -82,7 +83,7 @@ export default {
                 formData.append('captcha_key', this.captchaKey);
                 formData.append('captcha_value', this.captchaValue);
 
-                const response = await axios.post(`${process.env.VUE_APP_BACKEND_URL}/user/register_user`, formData, {
+                const response = await axios.post(`${appConfig.backendUrl}/user/register_user`, formData, {
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded',
                     },
@@ -112,9 +113,9 @@ export default {
         },
         async refreshCaptcha() {
             try {
-                const response = await axios.get(`${process.env.VUE_APP_BACKEND_URL}/user/generate_captcha`);
+                const response = await axios.get(`${appConfig.backendUrl}/user/generate_captcha`);
                 this.captchaKey = response.data.key;
-                this.captchaImageUrl = `${process.env.VUE_APP_BACKEND_URL}${response.data.image_url}`;
+                this.captchaImageUrl = `${appConfig.backendUrl}${response.data.image_url}`;
             } catch (error) {
                 console.error('获取验证码失败：', error);
             }

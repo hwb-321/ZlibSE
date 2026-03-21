@@ -1,0 +1,16 @@
+{
+  "backendUrl": "http://4070s-linux.xinghen.ip-ddns.com:8000",
+  "devServer": {
+    "host": "0.0.0.0",
+    "port": 8080,
+    "allowedHosts": [
+      "4070s-linux.xinghen.ip-ddns.com",
+      "localhost",
+      "127.0.0.1"
+    ]
+  },
+  "build": {
+    "publicPath": "/",
+    "assetsDir": "static"
+  }
+}

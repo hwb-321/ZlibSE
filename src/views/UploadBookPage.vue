@@ -38,6 +38,7 @@
   
 <script>
 import axios from 'axios';
+import appConfig from '@/config/appConfig.json';
 
 export default {
     data() {
@@ -105,7 +106,7 @@ export default {
                     formData.append('cover_image_path', this.cover_image_path);
                 }
 
-                await axios.post(`${process.env.VUE_APP_BACKEND_URL}/book/upload_book`, formData, {
+                await axios.post(`${appConfig.backendUrl}/book/upload_book`, formData, {
                     headers: {
                         'Content-Type': 'multipart/form-data'
                     },

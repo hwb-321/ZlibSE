@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import axios from 'axios';
+import appConfig from '@/config/appConfig.json';
 
 // 引入组件
 import HomePage from '../views/HomePage.vue';
@@ -81,7 +82,7 @@ const router = createRouter({
 router.beforeEach(async (to, from, next) => {
     console.log("in");
     try {
-        const sessionResponse = await axios.get(`${process.env.VUE_APP_BACKEND_URL}/user/check_session`, { withCredentials: true });
+        const sessionResponse = await axios.get(`${appConfig.backendUrl}/user/check_session`, { withCredentials: true });
 
         if (sessionResponse.data.isLoggedIn) {
             // 如果用户已登录且当前在登录页面，则跳转到主页面
