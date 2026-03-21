@@ -11,7 +11,7 @@
                             required></v-text-field>
                         <v-text-field label="密码" prepend-icon="mdi-lock" type="password" v-model="password"
                             required></v-text-field>
-                        <v-row no-gutters>
+                        <v-row v-if="captchaEnabled" no-gutters>
                             <v-col cols="9">
                                 <v-text-field label="验证码" prepend-icon="mdi-shield-key" type="text" v-model="captchaValue"
                                     required></v-text-field>
@@ -54,12 +54,33 @@ export default {
             username: '',
             password: '',
             errorMessage: '',
+            captchaEnabled: true,
             captchaKey: '',
             captchaValue: '',
             captchaImageUrl: '',
         };
     },
     methods: {
+        async initCaptcha() {
+            try {
+                const response = await axios.get(
+                    `${appConfig.backendUrl}/user/init_csrf`,
+                    { withCredentials: true }
+                );
+                this.captchaEnabled = response.data.captchaEnabled !== false;
+                if (this.captchaEnabled) {
+                    await this.refreshCaptcha();
+                } else {
+                    this.captchaKey = '';
+                    this.captchaValue = '';
+                    this.captchaImageUrl = '';
+                }
+            } catch (error) {
+                console.error('初始化验证码配置失败：', error);
+                this.captchaEnabled = true;
+                await this.refreshCaptcha();
+            }
+        },
         async submitLogin() {
             try {
                 const formData = new URLSearchParams();
@@ -89,8 +110,17 @@ export default {
         async refreshCaptcha() {
             try {
                 const response = await axios.get(`${appConfig.backendUrl}/user/generate_captcha`);
-                this.captchaKey = response.data.key;
-                this.captchaImageUrl = `${appConfig.backendUrl}${response.data.image_url}`;
+                this.captchaEnabled = response.data.captchaEnabled !== false;
+                if (!this.captchaEnabled) {
+                    this.captchaKey = '';
+                    this.captchaValue = '';
+                    this.captchaImageUrl = '';
+                    return;
+                }
+                this.captchaKey = response.data.key || '';
+                this.captchaImageUrl = response.data.image_url
+                    ? `${appConfig.backendUrl}${response.data.image_url}`
+                    : '';
             } catch (error) {
                 console.error('获取验证码错误：', error);
             }
@@ -107,7 +137,7 @@ export default {
         this.$nextTick(() => {
             document.title = '登录';
         });
-        this.refreshCaptcha();
+        this.initCaptcha();
     },
 };
 </script>
