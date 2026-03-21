@@ -1,0 +1,29 @@
+# Development server settings.
+# `host` controls which network interface the FastAPI server binds to.
+# Use `127.0.0.1` for local-only access, or `0.0.0.0` if you want other devices
+# on the same network to reach your machine during development.
+server:
+  host: 127.0.0.1
+  # `port` is the HTTP port used by the backend service in development.
+  port: 8000
+  # `reload` enables hot reload for code changes and should stay true in development.
+  reload: true
+
+# Security settings used by the backend in development.
+security:
+  # `session_secret` is used to sign session data.
+  # Replace this with a private random string before sharing the environment.
+  session_secret: dev-session-secret-change-me
+
+# Database settings for local development.
+database:
+  # `sqlite_path` can be a relative path under the repository root
+  # or an absolute path on disk.
+  sqlite_path: zlibse.db
+
+# Cross-origin settings for local frontend/backend development.
+cors:
+  # `allow_origins` lists frontend origins allowed to call the backend.
+  allow_origins:
+    - http://localhost:8080
+    - http://127.0.0.1:8080
