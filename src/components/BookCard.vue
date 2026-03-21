@@ -3,7 +3,7 @@
         <div class="book-card d-flex" outlined>
             <v-col cols="12">
                 <div class="content-container">
-                    <v-img :src="this.$getCoverUrl(book.id)" class="book-cover" height="200" @error="handleImageError"
+                    <v-img :src="coverUrl" class="book-cover" height="200" @error="handleImageError"
                         :alt="`封面 - ${book.title}`">
                     </v-img>
 
@@ -22,44 +22,45 @@
     </router-link>
 </template>
 
-  
 <script>
 export default {
     name: 'BookCard',
     props: {
         book: {
             type: Object,
-            required: true
-        }
+            required: true,
+        },
     },
     data() {
         return {
-            loadError: false
+            loadError: false,
         };
     },
     computed: {
-        formattedFileSize() {
-            const fileSizeNum = parseFloat(this.book.file_size); // 使用book对象的file_size属性
-            if (!isNaN(fileSizeNum)) {
-                if (fileSizeNum >= 1024) {
-                    // 文件大小大于或等于 1024MB，转换为 GB
-                    return (fileSizeNum / 1024).toFixed(1) + ' GB';
-                } else {
-                    // 文件大小小于 1024MB，保持 MB 显示
-                    return fileSizeNum.toFixed(1) + ' MB';
-                }
+        coverUrl() {
+            if (this.loadError || !this.book.cover_image_path) {
+                return '';
             }
-            return ''; // 如果 file_size 不是数字，则返回空字符串
-        }
+            return this.$getCoverUrl(this.book.cover_image_path);
+        },
+        formattedFileSize() {
+            const fileSizeNum = parseFloat(this.book.file_size);
+            if (!Number.isNaN(fileSizeNum)) {
+                if (fileSizeNum >= 1024) {
+                    return `${(fileSizeNum / 1024).toFixed(1)} GB`;
+                }
+                return `${fileSizeNum.toFixed(1)} MB`;
+            }
+            return '';
+        },
     },
     methods: {
         handleImageError() {
-            this.loadError = true; // 设置标记，表示图片加载失败
-        }
-    }
+            this.loadError = true;
+        },
+    },
 };
 </script>
-
 
 <style scoped>
 .book-card-link {
@@ -81,14 +82,12 @@ export default {
 
 .book-cover {
     max-width: 30%;
-    /* Adjust as needed */
     object-fit: cover;
 }
 
 .book-info {
     padding-left: 1rem;
     max-width: 65%;
-    /* Adjust as needed */
 }
 
 .book-title {
@@ -103,7 +102,6 @@ export default {
 
 .book-meta {
     margin-top: auto;
-    /* Pushes the meta information to the bottom */
     font-size: 0.875rem;
 }
 

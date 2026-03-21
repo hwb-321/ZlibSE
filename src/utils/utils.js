@@ -1,4 +1,4 @@
-import appConfig from '@/config/appConfig.json';
+import { buildBackendUrl } from '@/utils/fileApi';
 
 export function getCookie(name) {
     let cookieValue = null;
@@ -15,6 +15,6 @@ export function getCookie(name) {
     return cookieValue;
 }
 
-export function getCoverUrl(bookId) {
-    return `${appConfig.backendUrl}/book/cover/${bookId}`;
+export function getCoverUrl(coverPath) {
+    return buildBackendUrl(coverPath);
 }
