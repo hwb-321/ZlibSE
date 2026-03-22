@@ -3,3 +3,6 @@ __pycache__/
 media/
 .venv/
 zlibse.db
+benchmark/benchmark_data.yaml
+benchmark/logs/*.md
+!benchmark/logs/.gitkeep
