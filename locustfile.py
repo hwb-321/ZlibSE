@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from locust import HttpUser, between, events, task
+from locust.util.timespan import parse_timespan
 
 from config_loader import get_all_accounts, load_benchmark_config
 
@@ -54,14 +55,34 @@ def _pick_book_id() -> int | None:
         return _book_ids[0]
 
 
+def _get_enabled_tests() -> dict[str, bool]:
+    default = {
+        "list_books": True,
+        "search_books": True,
+        "book_detail": True,
+        "favorite": True,
+        "download_url": True,
+    }
+    tests = _get_config_section("enabled_tests", default)
+    return {
+        key: bool(tests.get(key, default_value))
+        for key, default_value in default.items()
+    }
+
+
 @events.init_command_line_parser.add_listener
 def _(parser):
     scenarios = _get_config_section("scenarios")
+    default_users = int(scenarios.get("vus", 1))
+    default_spawn_rate = float(scenarios.get("spawn_rate", 1))
+    default_run_time = str(scenarios.get("duration", "30s"))
+    default_host = str(_config.get("base_url", "http://127.0.0.1:8000"))
     parser.set_defaults(
-        host=str(_config.get("base_url", "http://127.0.0.1:8000")),
-        users=int(scenarios.get("vus", 1)),
-        spawn_rate=float(scenarios.get("spawn_rate", 1)),
-        run_time=str(scenarios.get("duration", "30s")),
+        host=default_host,
+        users=default_users,
+        num_users=default_users,
+        spawn_rate=default_spawn_rate,
+        run_time=default_run_time,
     )
 
 
@@ -71,11 +92,32 @@ def _(environment, **_kwargs):
     thresholds = _get_config_section("thresholds")
     max_error_rate = float(thresholds.get("max_error_rate", 0.01))
     p95_ms = int(thresholds.get("p95_ms", 300))
+    p99_ms = int(thresholds.get("p99_ms", 500))
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
     _current_environment = environment
     environment._benchmark_report_path = LOGS_DIR / f"压测结果_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
     environment._benchmark_max_error_rate = max_error_rate
     environment._benchmark_p95_ms = p95_ms
+    environment._benchmark_p99_ms = p99_ms
+
+    scenarios = _get_config_section("scenarios")
+    parsed_options = environment.parsed_options
+    configured_users = int(scenarios.get("vus", 1))
+    configured_spawn_rate = float(scenarios.get("spawn_rate", 1))
+    configured_run_time = parse_timespan(str(scenarios.get("duration", "30s")))
+    configured_host = str(_config.get("base_url", "http://127.0.0.1:8000"))
+
+    # Locust 2.x has both users and num_users in different code paths.
+    if getattr(parsed_options, "users", None) in (None, 1):
+        parsed_options.users = configured_users
+    if getattr(parsed_options, "num_users", None) in (None, 1):
+        parsed_options.num_users = configured_users
+    if getattr(parsed_options, "spawn_rate", None) in (None, 1):
+        parsed_options.spawn_rate = configured_spawn_rate
+    if not getattr(parsed_options, "run_time", None) or getattr(parsed_options, "run_time", None) == 20:
+        parsed_options.run_time = configured_run_time
+    if not getattr(parsed_options, "host", None):
+        parsed_options.host = configured_host
 
     environment.parsed_options.stop_timeout = 5
 
@@ -94,18 +136,20 @@ def _on_quitting(**_kwargs):
         environment,
         max_error_rate=float(getattr(environment, "_benchmark_max_error_rate", 0.01)),
         p95_ms=int(getattr(environment, "_benchmark_p95_ms", 300)),
+        p99_ms=int(getattr(environment, "_benchmark_p99_ms", 500)),
     )
 
 
-def _finalize_run(environment, *, max_error_rate: float, p95_ms: int) -> None:
+def _finalize_run(environment, *, max_error_rate: float, p95_ms: int, p99_ms: int) -> None:
     stats = environment.stats.total
     total_requests = max(stats.num_requests, 1)
     error_rate = stats.num_failures / total_requests
     p95_value = stats.get_response_time_percentile(0.95) or 0
+    p99_value = stats.get_response_time_percentile(0.99) or 0
 
     _write_chinese_report(environment)
 
-    if error_rate > max_error_rate or p95_value > p95_ms:
+    if error_rate > max_error_rate or p95_value > p95_ms or p99_value > p99_ms:
         environment.process_exit_code = 1
     else:
         environment.process_exit_code = 0
@@ -127,11 +171,12 @@ def _write_chinese_report(environment) -> None:
         f"- 总体 QPS：{total.total_rps:.2f}",
         f"- 平均响应时间：{total.avg_response_time:.2f} ms",
         f"- P95 响应时间：{(total.get_response_time_percentile(0.95) or 0):.2f} ms",
+        f"- P99 响应时间：{(total.get_response_time_percentile(0.99) or 0):.2f} ms",
         "",
         "## 各接口统计",
         "",
-        "| 接口 | 请求数 | 失败数 | QPS | 平均耗时(ms) | P95(ms) |",
-        "| --- | ---: | ---: | ---: | ---: | ---: |",
+        "| 接口 | 请求数 | 失败数 | QPS | 平均耗时(ms) | P95(ms) | P99(ms) |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
 
     entries = sorted(
@@ -141,7 +186,8 @@ def _write_chinese_report(environment) -> None:
     for (name, _method), entry in entries:
         lines.append(
             f"| {name} | {entry.num_requests} | {entry.num_failures} | {entry.total_rps:.2f} | "
-            f"{entry.avg_response_time:.2f} | {(entry.get_response_time_percentile(0.95) or 0):.2f} |"
+            f"{entry.avg_response_time:.2f} | {(entry.get_response_time_percentile(0.95) or 0):.2f} | "
+            f"{(entry.get_response_time_percentile(0.99) or 0):.2f} |"
         )
 
     with _report_lock:
@@ -154,10 +200,12 @@ def _write_chinese_report(environment) -> None:
 
 class ZlibSEUser(HttpUser):
     account: dict[str, Any]
+    access_token: str
     abstract = False
 
     scenarios = _get_config_section("scenarios")
     books_config = _get_config_section("books")
+    enabled_tests = _get_enabled_tests()
     wait_time = between(
         float(scenarios.get("wait_time_min_ms", 500)) / 1000.0,
         float(scenarios.get("wait_time_max_ms", 1500)) / 1000.0,
@@ -165,7 +213,8 @@ class ZlibSEUser(HttpUser):
 
     def on_start(self) -> None:
         self.account = _next_account()
-        self._login()
+        if self.enabled_tests.get("favorite", True):
+            self._login()
 
     def _login(self) -> None:
         payload = {
@@ -182,9 +231,30 @@ class ZlibSEUser(HttpUser):
             data = response.json()
             if not data.get("success"):
                 response.failure(f"login failed: {data}")
+                return
+
+            access_token = data.get("access_token")
+            if not isinstance(access_token, str) or not access_token:
+                response.failure(f"login did not return access_token: {data}")
+                return
+
+            self.access_token = access_token
+            self.client.headers.update({"Authorization": f"Bearer {self.access_token}"})
+
+    def _ensure_book_id(self) -> int | None:
+        book_id = _pick_book_id()
+        if book_id is not None:
+            return book_id
+        if self.enabled_tests.get("list_books", True):
+            self.list_books()
+        elif self.enabled_tests.get("search_books", True):
+            self.search_books()
+        return _pick_book_id()
 
     @task(4)
     def list_books(self) -> None:
+        if not self.enabled_tests.get("list_books", True):
+            return
         page = int(self.books_config.get("page", 1))
         page_size = int(self.books_config.get("page_size", 10))
         with self.client.get(
@@ -208,6 +278,8 @@ class ZlibSEUser(HttpUser):
 
     @task(3)
     def search_books(self) -> None:
+        if not self.enabled_tests.get("search_books", True):
+            return
         query = str(self.books_config.get("search_query", "python"))
         with self.client.get(
             "/book/search",
@@ -230,9 +302,10 @@ class ZlibSEUser(HttpUser):
 
     @task(2)
     def get_book_detail(self) -> None:
-        book_id = _pick_book_id()
+        if not self.enabled_tests.get("book_detail", True):
+            return
+        book_id = self._ensure_book_id()
         if book_id is None:
-            self.list_books()
             return
 
         with self.client.get(
@@ -245,9 +318,10 @@ class ZlibSEUser(HttpUser):
 
     @task(1)
     def toggle_favorite(self) -> None:
-        book_id = _pick_book_id()
+        if not self.enabled_tests.get("favorite", True):
+            return
+        book_id = self._ensure_book_id()
         if book_id is None:
-            self.list_books()
             return
 
         with self.client.post(
@@ -268,9 +342,10 @@ class ZlibSEUser(HttpUser):
 
     @task(1)
     def get_download_url(self) -> None:
-        book_id = _pick_book_id()
+        if not self.enabled_tests.get("download_url", True):
+            return
+        book_id = self._ensure_book_id()
         if book_id is None:
-            self.list_books()
             return
 
         with self.client.get(

@@ -1,5 +1,4 @@
 __pycache__/
 .venv/
 benchmark_data.yaml
-logs/*.md
-!logs/.gitkeep
+logs/

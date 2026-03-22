@@ -4,7 +4,7 @@ base_url: "http://4070s-linux.xinghen.ip-ddns.com:8000"
 # 压测账号生成配置。
 accounts:
   # 需要生成的普通测试用户数量。
-  user_count: 100
+  user_count: 200
   # 测试用户名统一前缀，脚本会自动补三位序号。
   username_prefix: "bench_user"
   # 测试邮箱统一域名。
@@ -17,20 +17,33 @@ scenarios:
   # 并发虚拟用户数。
   vus: 100
   # 压测持续时间。
-  duration: "30s"
+  duration: "10s"
   # 每秒启动多少个新用户。
-  spawn_rate: 5
+  spawn_rate: 50
   # 两次请求之间的最小等待时间，单位毫秒。
-  wait_time_min_ms: 500
+  wait_time_min_ms: 0
   # 两次请求之间的最大等待时间，单位毫秒。
-  wait_time_max_ms: 1500
+  wait_time_max_ms: 0
+
+# 选择本次压测要开启哪些接口场景。
+enabled_tests:
+  # 书籍列表。
+  list_books: true
+  # 书籍搜索。
+  search_books: false
+  # 书籍详情。
+  book_detail: false
+  # 收藏/取消收藏。
+  favorite: false
+  # 下载地址获取。
+  download_url: false
 
 # 压测初始化书籍与查询参数配置。
 books:
   # 列表接口默认页码。
   page: 1
   # 列表接口默认每页数量。
-  page_size: 10
+  page_size: 20
   # 搜索接口默认关键字。
   search_query: "python"
   # 每个测试用户初始化多少本压测书籍。
@@ -49,4 +62,6 @@ thresholds:
   # 可接受的最大错误率。
   max_error_rate: 0.01
   # 可接受的 P95 响应时间上限，单位毫秒。
-  p95_ms: 300
+  p95_ms: 200
+  # 可接受的 P99 响应时间上限，单位毫秒。
+  p99_ms: 400

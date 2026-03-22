@@ -7,7 +7,7 @@
 `config.yaml`
 
 - 压测总配置文件。
-- 负责定义压测目标地址、普通用户数量、并发用户数、压测时长、等待时间、每个用户初始化多少本书、书籍分页参数、搜索关键字和阈值。
+- 负责定义压测目标地址、普通用户数量、并发用户数、压测时长、等待时间、要开启的接口场景、每个用户初始化多少本书、书籍分页参数、搜索关键字和阈值。
 
 `benchmark_data.yaml`
 
@@ -30,14 +30,15 @@
 - 读取 `benchmark_data.yaml`，通过后端注册接口创建测试账号。
 - 当前只创建普通用户，不依赖项目内部数据库模型。
 - 如果账号已存在，会将其计为已存在并跳过。
-- 注册完成后，会登录每个用户并按同一配置文件中的 `books` 列表初始化书籍。
+- 注册完成后，会登录每个用户一次，获取 JWT access token，并按同一配置文件中的 `books` 列表初始化书籍。
 
 `locustfile.py`
 
 - Locust 压测入口脚本。
-- 会读取 `config.yaml` 和 `benchmark_data.yaml`，自动使用测试账号登录并执行核心接口压测。
+- 会读取 `config.yaml` 和 `benchmark_data.yaml`，自动使用测试账号登录一次并复用 JWT access token 执行核心接口压测。
 - 当前覆盖的场景包括登录、书籍列表、书籍搜索、书籍详情、收藏、下载链接获取。
-- 每次压测结束后，会把中文结果报告写入 `logs/`，包括总体 QPS、平均耗时、P95，以及各接口统计表。
+- 可以通过 `config.yaml` 里的 `enabled_tests` 开关，按需启用或关闭具体接口场景。
+- 每次压测结束后，会把中文结果报告写入 `logs/`，包括总体 QPS、失败数、平均耗时、P95、P99，以及各接口统计表。
 
 ## 推荐使用顺序
 
@@ -80,6 +81,8 @@ locust -f locustfile.py
 ## 运行前注意事项
 
 - 当前登录接口默认依赖验证码开关，压测前建议确认业务配置中的 `security.captcha_enabled` 为 `false`。
+- 当前后端认证已切换为 JWT，压测脚本会在登录成功后自动携带 `Authorization: Bearer <token>`。
+- 当 `enabled_tests.favorite=true` 时，Locust 会在每个虚拟用户启动时先登录一次；如果只测公开读接口，可以将其关闭。
 - 每个测试账号生成多少本书由 `books.books_per_user` 控制，并会写入 `benchmark_data.yaml`。
 - 账号和书籍初始化现在共用同一个 `benchmark_data.yaml`，每个用户下的 `books` 列表就是最终初始化源数据。
 - 运行 `init_benchmark_data.py` 前，建议先在根目录 `config.yaml` 中将 `benchmark.mock_upload_enabled` 设为 `true`，并确保后端服务已启动。

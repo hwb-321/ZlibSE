@@ -1,11 +1,9 @@
 from __future__ import annotations
 
 import json
-import http.cookiejar
 import urllib.error
 import urllib.parse
 import urllib.request
-from pathlib import Path
 
 from tqdm import tqdm
 
@@ -15,71 +13,74 @@ from config_loader import get_all_accounts, load_benchmark_config
 BOOK_TITLE_PREFIX = "压测书籍"
 
 
-def _build_opener():
-    cookie_jar = http.cookiejar.CookieJar()
-    return urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cookie_jar))
-
-
-def _json_request(opener, method: str, url: str, payload: dict | None = None) -> dict:
+def _json_request(method: str, url: str, payload: dict | None = None, *, token: str | None = None) -> dict:
     body = None
     headers = {}
     if payload is not None:
         body = json.dumps(payload).encode("utf-8")
         headers["Content-Type"] = "application/json"
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
     request = urllib.request.Request(url, data=body, method=method, headers=headers)
     try:
-        with opener.open(request) as response:
+        with urllib.request.urlopen(request) as response:
             return json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="ignore")
         raise RuntimeError(f"{method} {url} failed: {exc.code} {detail}") from exc
 
 
-def _form_request(opener, method: str, url: str, payload: dict[str, str]) -> dict:
+def _form_request(method: str, url: str, payload: dict[str, str], *, token: str | None = None) -> dict:
     data = urllib.parse.urlencode(payload).encode("utf-8")
-    request = urllib.request.Request(url, data=data, method=method)
+    headers = {}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    request = urllib.request.Request(url, data=data, method=method, headers=headers)
     try:
-        with opener.open(request) as response:
+        with urllib.request.urlopen(request) as response:
             return json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="ignore")
         raise RuntimeError(f"{method} {url} failed: {exc.code} {detail}") from exc
 
 
-def _login(base_url: str, opener, account: dict[str, object]) -> None:
+def _login(base_url: str, account: dict[str, object]) -> str:
     payload = {
         "username": str(account["username"]),
         "password": str(account["password"]),
         "captcha_key": "",
         "captcha_value": "",
     }
-    data = _form_request(opener, "POST", f"{base_url}/user/login_user", payload)
+    data = _form_request("POST", f"{base_url}/user/login_user", payload)
     if not data.get("success"):
         raise RuntimeError(f"login failed for {account['username']}: {data}")
+    access_token = data.get("access_token")
+    if not isinstance(access_token, str) or not access_token:
+        raise RuntimeError(f"login did not return access_token for {account['username']}: {data}")
+    return access_token
 
 
-def _list_uploaded_books(base_url: str, opener) -> list[dict]:
-    data = _json_request(opener, "GET", f"{base_url}/user/get_upload_book_list")
+def _list_uploaded_books(base_url: str, token: str) -> list[dict]:
+    data = _json_request("GET", f"{base_url}/user/get_upload_book_list", token=token)
     books = data.get("uploadedBooks", [])
     if not isinstance(books, list):
         raise RuntimeError("uploadedBooks response is invalid")
     return books
 
 
-def _delete_existing_benchmark_books(base_url: str, opener) -> int:
+def _delete_existing_benchmark_books(base_url: str, token: str) -> int:
     deleted_count = 0
-    for book in _list_uploaded_books(base_url, opener):
+    for book in _list_uploaded_books(base_url, token):
         title = str(book.get("title", ""))
         if not title.startswith(BOOK_TITLE_PREFIX):
             continue
-        _json_request(opener, "POST", f"{base_url}/user/delete_uploaded_book/{book['id']}")
+        _json_request("POST", f"{base_url}/user/delete_uploaded_book/{book['id']}", token=token)
         deleted_count += 1
     return deleted_count
 
 
-def _create_mock_file(base_url: str, opener, file_payload: dict[str, object]) -> int:
+def _create_mock_file(base_url: str, token: str, file_payload: dict[str, object]) -> int:
     data = _json_request(
-        opener,
         "POST",
         f"{base_url}/api/files/upload-complete",
         {
@@ -90,6 +91,7 @@ def _create_mock_file(base_url: str, opener, file_payload: dict[str, object]) ->
             "kind": str(file_payload["kind"]),
             "etag": str(file_payload.get("etag", "")),
         },
+        token=token,
     )
     file_id = data.get("fileId")
     if not isinstance(file_id, int):
@@ -97,9 +99,8 @@ def _create_mock_file(base_url: str, opener, file_payload: dict[str, object]) ->
     return file_id
 
 
-def _create_book(base_url: str, opener, book_payload: dict[str, object], book_file_id: int, cover_file_id: int | None) -> None:
+def _create_book(base_url: str, token: str, book_payload: dict[str, object], book_file_id: int, cover_file_id: int | None) -> None:
     data = _json_request(
-        opener,
         "POST",
         f"{base_url}/api/books",
         {
@@ -112,6 +113,7 @@ def _create_book(base_url: str, opener, book_payload: dict[str, object], book_fi
             "bookFileId": book_file_id,
             "coverFileId": cover_file_id,
         },
+        token=token,
     )
     if not data.get("success"):
         raise RuntimeError(f"create book failed: {data}")
@@ -135,9 +137,7 @@ def sync_users() -> tuple[int, int, int, int]:
     progress = tqdm(total=len(accounts) + total_books, desc="初始化压测数据", unit="项")
 
     for account in accounts:
-        opener = _build_opener()
         data = _form_request(
-            opener,
             "POST",
             f"{base_url}/user/register_user",
             {
@@ -160,8 +160,8 @@ def sync_users() -> tuple[int, int, int, int]:
 
         progress.set_postfix_str(f"用户 {account['username']}")
         progress.update(1)
-        _login(base_url, opener, account)
-        deleted_book_count += _delete_existing_benchmark_books(base_url, opener)
+        token = _login(base_url, account)
+        deleted_book_count += _delete_existing_benchmark_books(base_url, token)
 
         books = account.get("books", [])
         if not isinstance(books, list):
@@ -177,13 +177,13 @@ def sync_users() -> tuple[int, int, int, int]:
                 progress.close()
                 raise RuntimeError(f"book_file config is invalid for user {account['username']}")
 
-            book_file_id = _create_mock_file(base_url, opener, book_file_payload)
+            book_file_id = _create_mock_file(base_url, token, book_file_payload)
             cover_file_payload = book.get("cover_file")
             cover_file_id = None
             if isinstance(cover_file_payload, dict):
-                cover_file_id = _create_mock_file(base_url, opener, cover_file_payload)
+                cover_file_id = _create_mock_file(base_url, token, cover_file_payload)
 
-            _create_book(base_url, opener, book, book_file_id, cover_file_id)
+            _create_book(base_url, token, book, book_file_id, cover_file_id)
             created_book_count += 1
             progress.set_postfix_str(f"书籍 {book.get('title', '')}")
             progress.update(1)
