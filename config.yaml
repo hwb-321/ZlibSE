@@ -1,57 +1,52 @@
-# 后端服务启动配置。
-server:
-  # 监听地址。设置为 0.0.0.0 后，可以同时通过 localhost、127.0.0.1、局域网 IP、DDNS 域名访问。
-  host: 0.0.0.0
-  # 后端 HTTP 服务端口。
-  port: 8000
-  # 开发环境下是否开启热重载。
-  reload: true
+# 压测目标后端地址。
+base_url: "http://4070s-linux.xinghen.ip-ddns.com:8000"
 
-# 安全相关配置。
-security:
-  # Session 签名密钥。
-  session_secret: dev-session-secret-change-me
-  # 是否启用登录/注册验证码。
-  captcha_enabled: false
+# 压测账号生成配置。
+accounts:
+  # 需要生成的普通测试用户数量。
+  user_count: 100
+  # 测试用户名统一前缀，脚本会自动补三位序号。
+  username_prefix: "bench_user"
+  # 测试邮箱统一域名。
+  email_domain: "benchmark@local"
+  # 测试账号默认密码。
+  default_password: "BenchmarkPass123!"
 
-# 数据库配置。
-database:
-  # SQLite 文件路径。相对路径默认以仓库根目录为基准。
-  sqlite_path: zlibse.db
+# Locust 压测场景配置。
+scenarios:
+  # 并发虚拟用户数。
+  vus: 100
+  # 压测持续时间。
+  duration: "30s"
+  # 每秒启动多少个新用户。
+  spawn_rate: 5
+  # 两次请求之间的最小等待时间，单位毫秒。
+  wait_time_min_ms: 500
+  # 两次请求之间的最大等待时间，单位毫秒。
+  wait_time_max_ms: 1500
 
-# 压测辅助配置。
-benchmark:
-  # 是否开启压测文件模拟上传模式。开启后，/api/files/upload-complete 会跳过 COS 对象检查，
-  # 直接按请求体中的文件信息落库，便于本地压测时伪造上传成功的书籍文件。
-  mock_upload_enabled: false
+# 压测初始化书籍与查询参数配置。
+books:
+  # 列表接口默认页码。
+  page: 1
+  # 列表接口默认每页数量。
+  page_size: 10
+  # 搜索接口默认关键字。
+  search_query: "python"
+  # 每个测试用户初始化多少本压测书籍。
+  books_per_user: 5
+  # 压测书籍默认分类。
+  default_category: "benchmark"
+  # 压测书籍默认语言。
+  default_language: "zh-CN"
+  # 压测书籍默认年份。
+  default_year: 2024
+  # 是否为每本书同时生成封面文件信息。
+  include_cover: true
 
-# 跨域配置。
-cors:
-  # 允许访问后端接口的前端来源地址。
-  allow_origins:
-    - http://localhost:8080
-    - http://127.0.0.1:8080
-    - http://4070s-linux.xinghen.ip-ddns.com:8080
-
-# 对象存储配置。
-storage:
-  # 当前存储提供商。当前实现使用腾讯云 COS 的 S3 兼容接口。
-  provider: cos
-  # 存储桶名称。
-  bucket: zlibse-1313357152
-  # 存储桶地域。
-  region: ap-beijing
-  # COS 的 S3 兼容接入点。这里使用 region 级 endpoint，并通过 virtual-hosted-style 访问桶。
-  endpoint: https://cos.ap-beijing.myqcloud.com
-  # 访问密钥 ID。
-  secret_id: AKIDru6CAADWM1oMrGVlJm8NSNCtSr7IQWUT
-  # 访问密钥 Key。
-  secret_key: qdIl2BAyhEajuBHE0cBi3BKYkIhw0w9D
-  # 预签名上传链接有效期，单位秒。
-  upload_expires: 900
-  # 预签名下载链接有效期，单位秒。
-  download_expires: 300
-  # 正文文件对象 key 前缀。
-  book_prefix: books
-  # 封面文件对象 key 前缀。
-  cover_prefix: covers
+# 压测结果阈值配置。
+thresholds:
+  # 可接受的最大错误率。
+  max_error_rate: 0.01
+  # 可接受的 P95 响应时间上限，单位毫秒。
+  p95_ms: 300

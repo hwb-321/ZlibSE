@@ -2,20 +2,14 @@ from __future__ import annotations
 
 import json
 import http.cookiejar
-import sys
 import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
 
-BENCHMARK_DIR = Path(__file__).resolve().parent
-ROOT_DIR = BENCHMARK_DIR.parent
-if str(ROOT_DIR) not in sys.path:
-    sys.path.insert(0, str(ROOT_DIR))
-
 from tqdm import tqdm
 
-from benchmark.config_loader import get_all_accounts, load_benchmark_config
+from config_loader import get_all_accounts, load_benchmark_config
 
 
 BOOK_TITLE_PREFIX = "压测书籍"

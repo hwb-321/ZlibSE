@@ -1,18 +1,13 @@
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 import yaml
 
 
-BENCHMARK_DIR = Path(__file__).resolve().parent
-ROOT_DIR = BENCHMARK_DIR.parent
-if str(ROOT_DIR) not in sys.path:
-    sys.path.insert(0, str(ROOT_DIR))
-
-CONFIG_PATH = BENCHMARK_DIR / "config.yaml"
-OUTPUT_PATH = BENCHMARK_DIR / "benchmark_data.yaml"
+ROOT_DIR = Path(__file__).resolve().parent
+CONFIG_PATH = ROOT_DIR / "config.yaml"
+OUTPUT_PATH = ROOT_DIR / "benchmark_data.yaml"
 
 
 def _load_config() -> dict:
@@ -21,7 +16,7 @@ def _load_config() -> dict:
 
     data = yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8")) or {}
     if not isinstance(data, dict):
-        raise ValueError("benchmark/config.yaml must contain a YAML object")
+        raise ValueError("config.yaml must contain a YAML object")
     return data
 
 
@@ -115,7 +110,7 @@ def _build_output(config: dict) -> dict[str, object]:
     users = _build_accounts(accounts_config, books_config)
 
     output: dict[str, object] = {
-        "generated_from": str(CONFIG_PATH.relative_to(BENCHMARK_DIR.parent)),
+        "generated_from": str(CONFIG_PATH.relative_to(ROOT_DIR)),
         "accounts": users,
     }
     return output

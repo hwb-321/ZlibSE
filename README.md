@@ -1,6 +1,6 @@
-# Benchmark 目录说明
+# Benchmark 工具说明
 
-这个目录用于管理后端项目的压测配置、测试账号生成、测试账号初始化，以及 Locust 压测脚本。
+这个仓库用于管理后端项目的压测配置、测试数据生成、测试数据初始化，以及 Locust 压测脚本。
 
 ## 文件作用
 
@@ -37,48 +37,44 @@
 - Locust 压测入口脚本。
 - 会读取 `config.yaml` 和 `benchmark_data.yaml`，自动使用测试账号登录并执行核心接口压测。
 - 当前覆盖的场景包括登录、书籍列表、书籍搜索、书籍详情、收藏、下载链接获取。
-- 每次压测结束后，会把中文结果报告写入 `benchmark/logs/`，包括总体 QPS、平均耗时、P95，以及各接口统计表。
+- 每次压测结束后，会把中文结果报告写入 `logs/`，包括总体 QPS、平均耗时、P95，以及各接口统计表。
 
 ## 推荐使用顺序
 
 1. 生成压测初始化数据
 
 ```bash
-python3 benchmark/generate_benchmark_data.py
+python3 generate_benchmark_data.py
 ```
 
 2. 初始化全部压测数据
 
 ```bash
-python3 benchmark/init_benchmark_data.py
+python3 init_benchmark_data.py
 ```
 
 3. 安装 Locust
 
 ```bash
-pip install locust
+pip install -r requirements.txt
 ```
 
-4. 启动后端服务
+4. 启动被测后端服务
 
 示例：
-
-```bash
-python3 -m fastapi_app
-```
 
 5. 运行压测
 
 无头模式：
 
 ```bash
-locust -f benchmark/locustfile.py --headless
+locust -f locustfile.py --headless
 ```
 
 Web UI 模式：
 
 ```bash
-locust -f benchmark/locustfile.py
+locust -f locustfile.py
 ```
 
 ## 运行前注意事项

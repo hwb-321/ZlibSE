@@ -1,8 +1,5 @@
 __pycache__/
-.idea/
-media/
 .venv/
-zlibse.db
-benchmark/benchmark_data.yaml
-benchmark/logs/*.md
-!benchmark/logs/.gitkeep
+benchmark_data.yaml
+logs/*.md
+!logs/.gitkeep

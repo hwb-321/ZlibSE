@@ -6,9 +6,9 @@ from typing import Any
 import yaml
 
 
-BENCHMARK_DIR = Path(__file__).resolve().parent
-CONFIG_PATH = BENCHMARK_DIR / "config.yaml"
-DATA_PATH = BENCHMARK_DIR / "benchmark_data.yaml"
+ROOT_DIR = Path(__file__).resolve().parent
+CONFIG_PATH = ROOT_DIR / "config.yaml"
+DATA_PATH = ROOT_DIR / "benchmark_data.yaml"
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:

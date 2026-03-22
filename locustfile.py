@@ -1,23 +1,18 @@
 from __future__ import annotations
 
 import itertools
-import sys
 import threading
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-ROOT_DIR = Path(__file__).resolve().parent.parent
-if str(ROOT_DIR) not in sys.path:
-    sys.path.insert(0, str(ROOT_DIR))
-
 from locust import HttpUser, between, events, task
 
-from benchmark.config_loader import get_all_accounts, load_benchmark_config
+from config_loader import get_all_accounts, load_benchmark_config
 
 
-BENCHMARK_DIR = Path(__file__).resolve().parent
-LOGS_DIR = BENCHMARK_DIR / "logs"
+ROOT_DIR = Path(__file__).resolve().parent
+LOGS_DIR = ROOT_DIR / "logs"
 _config = load_benchmark_config()
 _accounts = get_all_accounts()
 _account_cycle = itertools.cycle(_accounts)
