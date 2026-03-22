@@ -46,11 +46,17 @@ class StorageConfig:
 
 
 @dataclass(frozen=True)
+class BenchmarkConfig:
+    mock_upload_enabled: bool = False
+
+
+@dataclass(frozen=True)
 class AppConfig:
     server: ServerConfig
     security: SecurityConfig
     database: DatabaseConfig
     storage: StorageConfig
+    benchmark: BenchmarkConfig
     cors_allow_origins: list[str]
 
 
@@ -81,6 +87,7 @@ def get_settings() -> AppConfig:
     security_raw = raw.get("security") or {}
     database_raw = raw.get("database") or {}
     storage_raw = raw.get("storage") or {}
+    benchmark_raw = raw.get("benchmark") or {}
     cors_raw = raw.get("cors") or {}
 
     server = ServerConfig(
@@ -115,6 +122,9 @@ def get_settings() -> AppConfig:
         book_prefix=str(storage_raw.get("book_prefix", "books")),
         cover_prefix=str(storage_raw.get("cover_prefix", "covers")),
     )
+    benchmark = BenchmarkConfig(
+        mock_upload_enabled=bool(benchmark_raw.get("mock_upload_enabled", False)),
+    )
 
     cors_allow_origins = _as_str_list(
         cors_raw.get("allow_origins"),
@@ -130,5 +140,6 @@ def get_settings() -> AppConfig:
         security=security,
         database=database,
         storage=storage,
+        benchmark=benchmark,
         cors_allow_origins=cors_allow_origins,
     )

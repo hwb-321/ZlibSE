@@ -19,6 +19,12 @@ database:
   # SQLite 文件路径。相对路径默认以仓库根目录为基准。
   sqlite_path: zlibse.db
 
+# 压测辅助配置。
+benchmark:
+  # 是否开启压测文件模拟上传模式。开启后，/api/files/upload-complete 会跳过 COS 对象检查，
+  # 直接按请求体中的文件信息落库，便于本地压测时伪造上传成功的书籍文件。
+  mock_upload_enabled: false
+
 # 跨域配置。
 cors:
   # 允许访问后端接口的前端来源地址。

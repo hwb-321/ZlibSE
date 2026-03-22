@@ -52,11 +52,19 @@ def upload_complete(
     db: Session = Depends(get_db),
 ):
     _ = current_user
-    metadata = head_object(payload.objectKey)
+    settings = get_settings()
+    if settings.benchmark.mock_upload_enabled:
+        metadata = {
+            "ContentType": payload.contentType,
+            "ContentLength": payload.size,
+            "ETag": payload.etag or "",
+        }
+    else:
+        metadata = head_object(payload.objectKey)
     stored_file = create_file_record(
         db,
-        bucket=get_settings().storage.bucket,
-        region=get_settings().storage.region,
+        bucket=settings.storage.bucket,
+        region=settings.storage.region,
         object_key=payload.objectKey,
         original_filename=payload.originalFilename,
         content_type=metadata.get("ContentType", payload.contentType),
