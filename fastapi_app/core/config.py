@@ -18,6 +18,8 @@ class ServerConfig:
     host: str = "0.0.0.0"
     port: int = 8000
     reload: bool = False
+    workers: int = 1
+    access_log: bool = True
 
 
 @dataclass(frozen=True)
@@ -53,12 +55,26 @@ class BenchmarkConfig:
 
 
 @dataclass(frozen=True)
+class RedisConfig:
+    enabled: bool = False
+    url: str = "redis://127.0.0.1:6379/0"
+    prefix: str = "zlibse"
+    default_ttl_seconds: int = 300
+    book_list_ttl_seconds: int = 120
+    book_search_ttl_seconds: int = 120
+    book_detail_ttl_seconds: int = 300
+    token_version_ttl_seconds: int = 300
+    file_meta_ttl_seconds: int = 300
+
+
+@dataclass(frozen=True)
 class AppConfig:
     server: ServerConfig
     security: SecurityConfig
     database: DatabaseConfig
     storage: StorageConfig
     benchmark: BenchmarkConfig
+    redis: RedisConfig
     cors_allow_origins: list[str]
 
 
@@ -90,12 +106,15 @@ def get_settings() -> AppConfig:
     database_raw = raw.get("database") or {}
     storage_raw = raw.get("storage") or {}
     benchmark_raw = raw.get("benchmark") or {}
+    redis_raw = raw.get("redis") or {}
     cors_raw = raw.get("cors") or {}
 
     server = ServerConfig(
         host=str(server_raw.get("host", "0.0.0.0")),
         port=int(server_raw.get("port", 8000)),
         reload=bool(server_raw.get("reload", False)),
+        workers=max(1, int(server_raw.get("workers", 1))),
+        access_log=bool(server_raw.get("access_log", True)),
     )
     security = SecurityConfig(
         jwt_secret_key=str(
@@ -126,6 +145,17 @@ def get_settings() -> AppConfig:
     benchmark = BenchmarkConfig(
         mock_upload_enabled=bool(benchmark_raw.get("mock_upload_enabled", False)),
     )
+    redis = RedisConfig(
+        enabled=bool(redis_raw.get("enabled", False)),
+        url=str(redis_raw.get("url", "redis://127.0.0.1:6379/0")),
+        prefix=str(redis_raw.get("prefix", "zlibse")),
+        default_ttl_seconds=max(1, int(redis_raw.get("default_ttl_seconds", 300))),
+        book_list_ttl_seconds=max(1, int(redis_raw.get("book_list_ttl_seconds", 120))),
+        book_search_ttl_seconds=max(1, int(redis_raw.get("book_search_ttl_seconds", 120))),
+        book_detail_ttl_seconds=max(1, int(redis_raw.get("book_detail_ttl_seconds", 300))),
+        token_version_ttl_seconds=max(1, int(redis_raw.get("token_version_ttl_seconds", 300))),
+        file_meta_ttl_seconds=max(1, int(redis_raw.get("file_meta_ttl_seconds", 300))),
+    )
 
     cors_allow_origins = _as_str_list(
         cors_raw.get("allow_origins"),
@@ -142,5 +172,6 @@ def get_settings() -> AppConfig:
         database=database,
         storage=storage,
         benchmark=benchmark,
+        redis=redis,
         cors_allow_origins=cors_allow_origins,
     )

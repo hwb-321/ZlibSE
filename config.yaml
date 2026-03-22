@@ -5,7 +5,11 @@ server:
   # 后端 HTTP 服务端口。
   port: 8000
   # 开发环境下是否开启热重载。
-  reload: true
+  reload: false
+  # Uvicorn worker 进程数。压测或生产环境可适当调大；开启 reload 时会自动退回为 1。
+  workers: 64
+  # 是否打印逐条 HTTP 访问日志。压测时建议关闭，以减少终端输出和日志开销。
+  access_log: false
 
 # 安全相关配置。
 security:
@@ -27,7 +31,28 @@ database:
 benchmark:
   # 是否开启压测文件模拟上传模式。开启后，/api/files/upload-complete 会跳过 COS 对象检查，
   # 直接按请求体中的文件信息落库，便于本地压测时伪造上传成功的书籍文件。
-  mock_upload_enabled: false
+  mock_upload_enabled: true
+
+# Redis 配置。enabled=false 时会完全回退到数据库/原始逻辑。
+redis:
+  # 是否启用 Redis 缓存。
+  enabled: true
+  # Redis 连接地址。
+  url: redis://127.0.0.1:6379/0
+  # Redis key 前缀。
+  prefix: zlibse
+  # 默认缓存 TTL，单位秒。
+  default_ttl_seconds: 300
+  # 书籍列表缓存 TTL。
+  book_list_ttl_seconds: 120
+  # 书籍搜索缓存 TTL。
+  book_search_ttl_seconds: 120
+  # 书籍详情缓存 TTL。
+  book_detail_ttl_seconds: 300
+  # token_version 缓存 TTL。
+  token_version_ttl_seconds: 300
+  # 下载元信息缓存 TTL。
+  file_meta_ttl_seconds: 300
 
 # 跨域配置。
 cors:

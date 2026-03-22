@@ -7,6 +7,7 @@ from ..core.deps import get_current_user
 from ..models import UploadedBook, User, UserCollectedBook
 from ..repositories.book_repository import get_book
 from ..repositories.upload_repository import get_upload_relation, list_uploaded_books
+from ..services.cache_service import bump_books_cache_version, delete_cached_public_file_meta
 from ..services.book_service import book_to_dict, delete_book_files
 
 router = APIRouter(tags=["uploads"])
@@ -33,9 +34,14 @@ def delete_uploaded_book(
         if not own_upload:
             return JSONResponse({"success": False, "message": "无权删除此书籍"}, status_code=403)
 
+    book_file_id = book.book_file_id
+    cover_file_id = book.cover_file_id
     db.query(UserCollectedBook).filter(UserCollectedBook.book_id == book_id).delete()
     db.query(UploadedBook).filter(UploadedBook.book_id == book_id).delete()
     delete_book_files(db, book)
     db.delete(book)
     db.commit()
+    bump_books_cache_version()
+    delete_cached_public_file_meta(book_file_id)
+    delete_cached_public_file_meta(cover_file_id)
     return {"success": True, "message": "书籍及相关文件已删除"}

@@ -8,6 +8,7 @@ from ..core.jwt import create_access_token
 from ..core.security import hash_password, verify_password
 from ..models import User
 from ..repositories.user_repository import get_user_by_username
+from ..services.cache_service import delete_cached_token_version, set_cached_token_version
 from ..services.captcha_service import (
     generate_captcha_payload,
     is_captcha_enabled,
@@ -72,6 +73,7 @@ def login_user(
     user = get_user_by_username(db, username)
     if not user or not verify_password(password, user.password_hash):
         return JSONResponse({"success": False, "error": "Invalid credentials"})
+    set_cached_token_version(user.id, user.token_version)
 
     return {
         "success": True,
@@ -106,4 +108,6 @@ def change_password_user(
     current_user.token_version += 1
     db.add(current_user)
     db.commit()
+    delete_cached_token_version(current_user.id)
+    set_cached_token_version(current_user.id, current_user.token_version)
     return {"success": True, "message": "?????"}

@@ -7,3 +7,4 @@ itsdangerous
 PyYAML
 boto3
 PyJWT
+redis

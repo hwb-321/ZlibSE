@@ -3,6 +3,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from ..core.config import get_settings
 from ..core.database import get_db
 from ..core.deps import get_current_user
 from ..models import UploadedBook, User
@@ -13,6 +14,15 @@ from ..services.book_service import (
     build_book_detail,
     create_book_from_file_ids,
     update_book_from_file_ids,
+)
+from ..services.cache_service import (
+    build_book_detail_cache_key,
+    build_book_list_cache_key,
+    build_book_search_cache_key,
+    bump_books_cache_version,
+    delete_cached_public_file_meta,
+    get_json,
+    set_json,
 )
 
 router = APIRouter(tags=["books"])
@@ -57,6 +67,9 @@ def create_book(
     db.add(UploadedBook(user_id=current_user.id, book_id=book.id))
     db.commit()
     db.refresh(book)
+    bump_books_cache_version()
+    delete_cached_public_file_meta(book.book_file_id)
+    delete_cached_public_file_meta(book.cover_file_id)
     return {"success": True, "book": book_to_dict(book)}
 
 
@@ -70,6 +83,8 @@ def update_book(
     book = get_book(db, book_id)
     if not book:
         return JSONResponse({"success": False, "message": "书籍不存在"}, status_code=404)
+    old_book_file_id = book.book_file_id
+    old_cover_file_id = book.cover_file_id
 
     if not current_user.is_superuser:
         own_upload = get_upload_relation(db, current_user.id, book_id)
@@ -97,6 +112,11 @@ def update_book(
     db.add(book)
     db.commit()
     db.refresh(book)
+    bump_books_cache_version()
+    delete_cached_public_file_meta(old_book_file_id)
+    delete_cached_public_file_meta(old_cover_file_id)
+    delete_cached_public_file_meta(book.book_file_id)
+    delete_cached_public_file_meta(book.cover_file_id)
     return {"success": True, "book": book_to_dict(book)}
 
 
@@ -114,18 +134,32 @@ def list_book(
     if page < 1 or pageSize < 1:
         raise HTTPException(status_code=400, detail="Invalid page params")
 
+    cache_key = build_book_list_cache_key(page, pageSize)
+    cached = get_json(*cache_key)
+    if cached is not None:
+        return cached
+
     books = list_books(db, page, pageSize)
     if not books and page != 1:
         return JSONResponse({"error": "页面不存在"}, status_code=404)
-    return {"books": [book_to_dict(book) for book in books]}
+    result = {"books": [book_to_dict(book) for book in books]}
+    set_json(*cache_key, value=result, ttl_seconds=get_settings().redis.book_list_ttl_seconds)
+    return result
 
 
 @router.get("/book/get_descriptions/{book_id}")
 def get_descriptions(book_id: int, db: Session = Depends(get_db)):
+    cache_key = build_book_detail_cache_key(book_id)
+    cached = get_json(*cache_key)
+    if cached is not None:
+        return cached
+
     book = get_book(db, book_id)
     if not book:
         raise HTTPException(status_code=404, detail="书籍不存在")
-    return build_book_detail(book)
+    result = build_book_detail(book)
+    set_json(*cache_key, value=result, ttl_seconds=get_settings().redis.book_detail_ttl_seconds)
+    return result
 
 
 @router.get("/book/search")
@@ -133,5 +167,12 @@ def book_search(
     query: str = "",
     db: Session = Depends(get_db),
 ):
+    cache_key = build_book_search_cache_key(query)
+    cached = get_json(*cache_key)
+    if cached is not None:
+        return cached
+
     books = search_books(db, query)
-    return {"query": query, "books": [book_to_dict(book) for book in books]}
+    result = {"query": query, "books": [book_to_dict(book) for book in books]}
+    set_json(*cache_key, value=result, ttl_seconds=get_settings().redis.book_search_ttl_seconds)
+    return result
