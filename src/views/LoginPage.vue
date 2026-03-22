@@ -47,6 +47,7 @@
 <script>
 import axios from 'axios';
 import appConfig from '@/config/appConfig.json';
+import { setAccessToken } from '@/utils/auth';
 
 export default {
     data() {
@@ -63,13 +64,13 @@ export default {
     methods: {
         async initCaptcha() {
             try {
-                const response = await axios.get(
-                    `${appConfig.backendUrl}/user/init_csrf`,
-                    { withCredentials: true }
-                );
+                const response = await axios.get(`${appConfig.backendUrl}/user/generate_captcha`);
                 this.captchaEnabled = response.data.captchaEnabled !== false;
                 if (this.captchaEnabled) {
-                    await this.refreshCaptcha();
+                    this.captchaKey = response.data.key || '';
+                    this.captchaImageUrl = response.data.image_url
+                        ? `${appConfig.backendUrl}${response.data.image_url}`
+                        : '';
                 } else {
                     this.captchaKey = '';
                     this.captchaValue = '';
@@ -94,11 +95,11 @@ export default {
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded',
                     },
-                    withCredentials: true
                 });
 
                 if (response.data.success) {
-                    this.$router.push('/home');
+                    setAccessToken(response.data.access_token);
+                    this.$router.push('/');
                 } else {
                     this.errorMessage = response.data.error;
                 }

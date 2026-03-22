@@ -28,7 +28,7 @@ export default {
     methods: {
         async deleteBook(bookId) {
             try {
-                const response = await axios.post(`${appConfig.backendUrl}/user/delete_uploaded_book/${bookId}`, {}, { withCredentials: true });
+                const response = await axios.post(`${appConfig.backendUrl}/user/delete_uploaded_book/${bookId}`, {});
                 if (response.data.success) {
                     this.$emit('bookDeleted', bookId);
                 }

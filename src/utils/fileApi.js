@@ -20,7 +20,6 @@ export async function uploadFileToStorage(file, kind) {
             size: file.size,
             kind,
         },
-        { withCredentials: true },
     );
 
     const { objectKey, uploadUrl, headers } = uploadUrlResponse.data;
@@ -49,16 +48,13 @@ export async function uploadFileToStorage(file, kind) {
             kind,
             etag: uploadResponse.headers.get('etag'),
         },
-        { withCredentials: true },
     );
 
     return completeResponse.data.fileId;
 }
 
 export async function fetchDownloadUrl(fileId) {
-    const response = await axios.get(`${appConfig.backendUrl}/api/files/${fileId}/download-url`, {
-        withCredentials: true,
-    });
+    const response = await axios.get(`${appConfig.backendUrl}/api/files/${fileId}/download-url`);
     return response.data.downloadUrl;
 }
 

@@ -2,13 +2,16 @@
   <v-app>
     <v-app-bar color="primary" dense v-if="shouldShowAppBar">
       <v-spacer></v-spacer>
-      <router-link to="/home" class="toolbar-title-link">
+      <router-link to="/" class="toolbar-title-link">
         <v-toolbar-title>ZlibSE</v-toolbar-title>
       </router-link>
       <v-spacer></v-spacer>
       <v-spacer></v-spacer>
-      <v-btn text to="/personal-center">个人中心</v-btn>
-      <v-btn text @click="logout">退出登录</v-btn>
+      <template v-if="isLoggedIn">
+        <v-btn text to="/personal-center">个人中心</v-btn>
+        <v-btn text @click="logout">退出登录</v-btn>
+      </template>
+      <v-btn v-else text to="/login">登录</v-btn>
     </v-app-bar>
 
     <v-container style="height: 100vh;">
@@ -18,11 +21,15 @@
 </template>
 
 <script>
-import axios from 'axios';
-import appConfig from '@/config/appConfig.json';
+import { authState, clearAccessToken } from '@/utils/auth';
 
 export default {
   name: 'App',
+  data() {
+    return {
+      authState,
+    };
+  },
   computed: {
     // 根据当前路由决定是否显示app bar
     shouldShowAppBar() {
@@ -30,20 +37,15 @@ export default {
       // 假设 'login' 和 'register' 是登录和注册路由的名称
       const excludedRoutes = ['LoginPage', 'RegisterPage', 'EpubReaderPage'];
       return !excludedRoutes.includes(this.$route.name);
+    },
+    isLoggedIn() {
+      return Boolean(this.authState.accessToken);
     }
   },
   methods: {
-    async logout() {
-      try {
-        const response = await axios.post(`${appConfig.backendUrl}/user/logout_user`, {}, { withCredentials: true });
-        if (response.data.success) {
-          this.$router.push('/');
-        } else {
-          console.error('Logout failed:', response.data.error);
-        }
-      } catch (error) {
-        console.error('Logout error:', error);
-      }
+    logout() {
+      clearAccessToken();
+      this.$router.push('/');
     },
   },
 }

@@ -60,9 +60,7 @@ export default {
   methods: {
     async fetchBooksCount() {
       try {
-        const response = await axios.get(`${appConfig.backendUrl}/book/count`, {
-          withCredentials: true,
-        });
+        const response = await axios.get(`${appConfig.backendUrl}/book/count`);
         const count = response.data.count;
         this.totalPages = Math.ceil(count / this.pageSize); // 计算总页数
       } catch (error) {
@@ -77,7 +75,6 @@ export default {
             page: this.currentPage,
             pageSize: this.pageSize,
           },
-          withCredentials: true,
         });
         this.books = response.data.books;
       } catch (error) {
@@ -90,7 +87,6 @@ export default {
         try {
           const response = await axios.get(`${appConfig.backendUrl}/book/search`, {
             params: { query: this.searchQuery },
-            withCredentials: true
           });
           this.books = response.data.books;
         } catch (error) {

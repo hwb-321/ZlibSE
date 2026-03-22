@@ -136,7 +136,6 @@ export default {
                         bookFileId,
                         coverFileId,
                     },
-                    { withCredentials: true },
                 );
 
                 this.successMessage = '上传成功';

@@ -73,13 +73,13 @@ export default {
     methods: {
         async initCaptcha() {
             try {
-                const response = await axios.get(
-                    `${appConfig.backendUrl}/user/init_csrf`,
-                    { withCredentials: true }
-                );
+                const response = await axios.get(`${appConfig.backendUrl}/user/generate_captcha`);
                 this.captchaEnabled = response.data.captchaEnabled !== false;
                 if (this.captchaEnabled) {
-                    await this.refreshCaptcha();
+                    this.captchaKey = response.data.key || '';
+                    this.captchaImageUrl = response.data.image_url
+                        ? `${appConfig.backendUrl}${response.data.image_url}`
+                        : '';
                 } else {
                     this.captchaKey = '';
                     this.captchaValue = '';
@@ -109,13 +109,12 @@ export default {
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded',
                     },
-                    withCredentials: true
                 });
 
                 if (response.data.success) {
                     this.message = '注册成功';
                     this.messageType = 'success';  // 设置消息类型为成功
-                    setTimeout(() => this.$router.push('/'), 2000);
+                    setTimeout(() => this.$router.push({ name: 'LoginPage' }), 2000);
                 } else {
                     this.message = response.data.message || '注册失败，请重试';
                     this.messageType = 'error';  // 设置消息类型为错误

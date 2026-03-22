@@ -1,9 +1,9 @@
 import { createApp } from 'vue';
 import App from './App.vue';
 import router from './router';
-import { getCookie, getCoverUrl } from '@/utils/utils';
+import { getCoverUrl } from '@/utils/utils';
+import { clearAccessToken, getAccessToken } from '@/utils/auth';
 import axios from 'axios';
-import appConfig from '@/config/appConfig.json';
 import 'vuetify/styles'
 import { createVuetify } from 'vuetify'
 import * as components from 'vuetify/components'
@@ -14,25 +14,30 @@ const vuetify = createVuetify({
     components,
     directives,
 })
-// 创建一个新的 Axios 实例，专门用于获取 CSRF 令牌
-const axiosInstance = axios.create();
 
-axios.interceptors.request.use(async (config) => {
-    if (!document.cookie.includes('csrftoken')) {
-        await axiosInstance.get(`${appConfig.backendUrl}/user/init_csrf`, { withCredentials: true });
-        console.log('已成功获取csrf令牌');
-        config.headers['X-CSRFToken'] = getCookie('csrftoken');
-    } else {
-        config.headers['X-CSRFToken'] = getCookie('csrftoken');
+axios.interceptors.request.use((config) => {
+    const token = getAccessToken();
+    if (token) {
+        config.headers = config.headers || {};
+        config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
 }, (error) => {
     return Promise.reject(error);
 });
 
+axios.interceptors.response.use((response) => response, async (error) => {
+    if (error.response?.status === 401) {
+        clearAccessToken();
+        if (router.currentRoute.value.name !== 'LoginPage') {
+            await router.push({ name: 'LoginPage' });
+        }
+    }
+    return Promise.reject(error);
+});
+
 const app = createApp(App);
 
-app.config.globalProperties.$getCookie = getCookie;
 app.config.globalProperties.$getCoverUrl = getCoverUrl;
 
 app.use(router).use(vuetify).mount('#app');

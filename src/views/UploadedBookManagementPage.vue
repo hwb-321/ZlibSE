@@ -59,9 +59,7 @@ export default {
         },
         async fetchUploadedBooks() {
             try {
-                const response = await axios.get(`${appConfig.backendUrl}/user/get_upload_book_list`, {
-                    withCredentials: true
-                });
+                const response = await axios.get(`${appConfig.backendUrl}/user/get_upload_book_list`);
                 this.uploadedBooks = response.data.uploadedBooks;
             } catch (error) {
                 console.error('Error fetching uploaded books:', error);

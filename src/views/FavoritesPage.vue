@@ -65,9 +65,7 @@ export default {
         },
         async fetchFavorites() {
             try {
-                const response = await axios.get(`${appConfig.backendUrl}/user/favorites`, {
-                    withCredentials: true
-                });
+                const response = await axios.get(`${appConfig.backendUrl}/user/favorites`);
                 console.log(response.data);
                 this.books = response.data.favorites;
             } catch (error) {

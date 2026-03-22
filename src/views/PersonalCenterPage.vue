@@ -5,7 +5,7 @@
                 <h1>个人中心</h1>
             </v-col>
             <v-col cols="12" md="4" class="d-flex justify-end align-center">
-                <router-link to="/home">
+                <router-link to="/">
                     <v-btn color="secondary">返回主界面</v-btn>
                 </router-link>
             </v-col>

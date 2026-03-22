@@ -33,6 +33,7 @@
 <script>
 import axios from 'axios';
 import appConfig from '@/config/appConfig.json';
+import { clearAccessToken } from '@/utils/auth';
 
 export default {
     data() {
@@ -64,15 +65,15 @@ export default {
                 formData.append('new_password', this.passwords.new);
                 // 发送请求
                 axios.post(`${appConfig.backendUrl}/user/change_password_user`, formData, {
-                    withCredentials: true
                 })
                     .then(response => {
                         if (response.data.success) {
-                            this.successMessage = '密码修改成功！';
+                            clearAccessToken();
+                            this.successMessage = '密码修改成功，请重新登录。';
                             this.errorMessage = '';
                             setTimeout(() => {
-                                this.$router.push({ name: 'PersonalCenterPage' });
-                            }, 2000);
+                                this.$router.push({ name: 'LoginPage' });
+                            }, 1500);
                         } else {
                             this.errorMessage = response.data.message;
                             this.successMessage = '';

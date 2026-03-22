@@ -1,6 +1,4 @@
 import { createRouter, createWebHistory } from 'vue-router';
-import axios from 'axios';
-import appConfig from '@/config/appConfig.json';
 
 // 引入组件
 import HomePage from '../views/HomePage.vue';
@@ -18,13 +16,13 @@ import ModifyBookInfoPage from '@/views/ModifyBookInfoPage.vue';
 const routes = [
     {
         path: '/',
-        name: 'LoginPage',
-        component: LoginPage
+        name: 'HomePage',
+        component: HomePage,
     },
     {
-        path: '/home',
-        name: 'HomePage',
-        component: HomePage
+        path: '/login',
+        name: 'LoginPage',
+        component: LoginPage
     },
     {
         path: '/upload-book',
@@ -79,31 +77,8 @@ const router = createRouter({
     routes
 });
 
-router.beforeEach(async (to, from, next) => {
-    console.log("in");
-    try {
-        const sessionResponse = await axios.get(`${appConfig.backendUrl}/user/check_session`, { withCredentials: true });
-
-        if (sessionResponse.data.isLoggedIn) {
-            // 如果用户已登录且当前在登录页面，则跳转到主页面
-            if (to.name === 'LoginPage') {
-                next({ name: 'HomePage' });
-            } else {
-                next();
-            }
-        } else {
-            // 如果用户未登录，则强制跳转到登录页面
-            if (to.name !== 'LoginPage' && to.name != 'RegisterPage') {
-                next({ name: 'LoginPage' });
-            } else {
-                next();
-            }
-        }
-    } catch (error) {
-        // 处理错误，例如网络问题等
-        console.error('Error checking session:', error);
-        next({ name: 'LoginPage' });
-    }
+router.beforeEach((to, from, next) => {
+    next();
 });
 
 export default router;

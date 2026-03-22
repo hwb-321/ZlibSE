@@ -96,9 +96,7 @@ export default {
         async fetchBookData() {
             try {
                 const bookId = this.$route.params.bookId;
-                const response = await axios.get(`${appConfig.backendUrl}/book/get_descriptions/${bookId}`, {
-                    withCredentials: true,
-                });
+                const response = await axios.get(`${appConfig.backendUrl}/book/get_descriptions/${bookId}`);
                 const data = response.data;
                 this.book = {
                     title: data.title || '',
@@ -179,7 +177,6 @@ export default {
                         bookFileId,
                         coverFileId,
                     },
-                    { withCredentials: true },
                 );
 
                 this.book.bookFileId = bookFileId;

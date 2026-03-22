@@ -62,9 +62,7 @@ export default {
             let fileId = this.$route.query.fileId;
             if (!fileId) {
                 const bookId = this.$route.query.bookId;
-                const response = await axios.get(`${appConfig.backendUrl}/book/get_descriptions/${bookId}`, {
-                    withCredentials: true,
-                });
+                const response = await axios.get(`${appConfig.backendUrl}/book/get_descriptions/${bookId}`);
                 fileId = response.data.book_file_id;
             }
 
@@ -73,7 +71,6 @@ export default {
                 {
                     params: { download: false },
                     responseType: 'arraybuffer',
-                    withCredentials: true,
                     onDownloadProgress: (event) => {
                         if (event.total) {
                             this.downloadProgress = Math.min(100, Math.round((event.loaded / event.total) * 100));
