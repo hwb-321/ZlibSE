@@ -11,6 +11,7 @@ class StoredFile(Base):
     __tablename__ = "stored_files"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     bucket: Mapped[str] = mapped_column(String(100))
     region: Mapped[str] = mapped_column(String(50))
     object_key: Mapped[str] = mapped_column(String(500))
@@ -19,6 +20,8 @@ class StoredFile(Base):
     size: Mapped[int] = mapped_column(Integer, default=0)
     etag: Mapped[str] = mapped_column(String(100), default="")
     kind: Mapped[str] = mapped_column(String(50))
+
+    user: Mapped[User | None] = relationship()
 
 
 class Book(Base):

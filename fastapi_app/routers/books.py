@@ -38,6 +38,7 @@ def create_book(
     try:
         book = create_book_from_file_ids(
             db=db,
+            current_user=current_user,
             title=payload.title,
             author=payload.author,
             isbn=payload.isbn,
@@ -79,6 +80,7 @@ def update_book(
         update_book_from_file_ids(
             db=db,
             book=book,
+            current_user=current_user,
             title=payload.title,
             author=payload.author,
             isbn=payload.isbn,
@@ -99,8 +101,7 @@ def update_book(
 
 
 @router.get("/book/count")
-def count_book(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    _ = current_user
+def count_book(db: Session = Depends(get_db)):
     return {"count": count_books(db)}
 
 
@@ -108,10 +109,8 @@ def count_book(current_user: User = Depends(get_current_user), db: Session = Dep
 def list_book(
     page: int = 1,
     pageSize: int = 10,
-    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    _ = current_user
     if page < 1 or pageSize < 1:
         raise HTTPException(status_code=400, detail="Invalid page params")
 
@@ -122,8 +121,7 @@ def list_book(
 
 
 @router.get("/book/get_descriptions/{book_id}")
-def get_descriptions(book_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    _ = current_user
+def get_descriptions(book_id: int, db: Session = Depends(get_db)):
     book = get_book(db, book_id)
     if not book:
         raise HTTPException(status_code=404, detail="书籍不存在")
@@ -133,9 +131,7 @@ def get_descriptions(book_id: int, current_user: User = Depends(get_current_user
 @router.get("/book/search")
 def book_search(
     query: str = "",
-    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    _ = current_user
     books = search_books(db, query)
     return {"query": query, "books": [book_to_dict(book) for book in books]}

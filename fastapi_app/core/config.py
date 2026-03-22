@@ -22,7 +22,9 @@ class ServerConfig:
 
 @dataclass(frozen=True)
 class SecurityConfig:
-    session_secret: str = "dev-session-secret-change-me"
+    jwt_secret_key: str = "dev-jwt-secret-change-me-please-use-32bytes-min"
+    jwt_algorithm: str = "HS256"
+    jwt_access_token_expire_days: int = 7
     captcha_enabled: bool = True
 
 
@@ -96,12 +98,11 @@ def get_settings() -> AppConfig:
         reload=bool(server_raw.get("reload", False)),
     )
     security = SecurityConfig(
-        session_secret=str(
-            os.getenv(
-                "SESSION_SECRET",
-                security_raw.get("session_secret", "dev-session-secret-change-me"),
-            )
+        jwt_secret_key=str(
+            security_raw.get("jwt_secret_key", "dev-jwt-secret-change-me-please-use-32bytes-min")
         ),
+        jwt_algorithm=str(security_raw.get("jwt_algorithm", "HS256")),
+        jwt_access_token_expire_days=int(security_raw.get("jwt_access_token_expire_days", 7)),
         captcha_enabled=bool(security_raw.get("captcha_enabled", True)),
     )
 

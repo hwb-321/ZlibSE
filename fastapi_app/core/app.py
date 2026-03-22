@@ -1,7 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from starlette.middleware.sessions import SessionMiddleware
 
 from .config import get_settings
 from .paths import MEDIA_DIR, ensure_runtime_dirs
@@ -18,12 +17,6 @@ def create_app() -> FastAPI:
     settings = get_settings()
 
     app = FastAPI(title="ZlibSE FastAPI")
-    app.add_middleware(
-        SessionMiddleware,
-        secret_key=settings.security.session_secret,
-        same_site="lax",
-        https_only=False,
-    )
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_allow_origins,

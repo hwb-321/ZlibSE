@@ -8,7 +8,7 @@ from ..core.config import get_settings
 from ..core.database import get_db
 from ..core.deps import get_current_user
 from ..models import User
-from ..repositories.file_repository import create_file_record, get_file
+from ..repositories.file_repository import create_file_record, get_file, is_file_referenced_by_book
 from ..services.storage_service import create_presigned_download_url, create_presigned_upload, head_object
 
 router = APIRouter(prefix="/api/files", tags=["files"])
@@ -63,6 +63,7 @@ def upload_complete(
         metadata = head_object(payload.objectKey)
     stored_file = create_file_record(
         db,
+        user_id=current_user.id,
         bucket=settings.storage.bucket,
         region=settings.storage.region,
         object_key=payload.objectKey,
@@ -80,12 +81,10 @@ def upload_complete(
 def get_download_url(
     file_id: int,
     request: Request,
-    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    _ = current_user
     stored_file = get_file(db, file_id)
-    if not stored_file:
+    if not stored_file or not is_file_referenced_by_book(db, file_id):
         raise HTTPException(status_code=404, detail="File not found")
 
     if stored_file.bucket == "legacy-local" and stored_file.region == "local":
@@ -107,12 +106,10 @@ def get_download_url(
 def get_file_content(
     file_id: int,
     download: bool = Query(True),
-    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    _ = current_user
     stored_file = get_file(db, file_id)
-    if not stored_file:
+    if not stored_file or not is_file_referenced_by_book(db, file_id):
         raise HTTPException(status_code=404, detail="File not found")
 
     from ..services.storage_service import build_file_response

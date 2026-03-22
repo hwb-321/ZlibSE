@@ -6,3 +6,4 @@ Pillow
 itsdangerous
 PyYAML
 boto3
+PyJWT

@@ -106,10 +106,45 @@ def _backfill_legacy_local_files() -> None:
                 )
 
 
+def _backfill_stored_file_owners() -> None:
+    inspector = inspect(engine)
+    table_names = set(inspector.get_table_names())
+    required_tables = {"stored_files", "books", "uploaded_books"}
+    if not required_tables.issubset(table_names):
+        return
+
+    stored_file_columns = {column["name"] for column in inspector.get_columns("stored_files")}
+    if "user_id" not in stored_file_columns:
+        return
+
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+                UPDATE stored_files
+                SET user_id = (
+                    SELECT uploaded_books.user_id
+                    FROM books
+                    JOIN uploaded_books ON uploaded_books.book_id = books.id
+                    WHERE books.book_file_id = stored_files.id OR books.cover_file_id = stored_files.id
+                    ORDER BY uploaded_books.id ASC
+                    LIMIT 1
+                )
+                WHERE user_id IS NULL
+                """
+            )
+        )
+
+
 def init_schema() -> None:
     Base.metadata.create_all(bind=engine)
+    if "users" in inspect(engine).get_table_names():
+        _add_column_if_missing("users", "token_version", "INTEGER NOT NULL DEFAULT 0")
+    if "stored_files" in inspect(engine).get_table_names():
+        _add_column_if_missing("stored_files", "user_id", "INTEGER")
     if "books" in inspect(engine).get_table_names():
         _add_column_if_missing("books", "book_file_id", "INTEGER")
         _add_column_if_missing("books", "cover_file_id", "INTEGER")
     Base.metadata.create_all(bind=engine)
     _backfill_legacy_local_files()
+    _backfill_stored_file_owners()

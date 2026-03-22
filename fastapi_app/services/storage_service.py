@@ -133,6 +133,9 @@ def delete_object(stored_file: StoredFile) -> None:
             local_path.unlink()
         return
 
+    if get_settings().benchmark.mock_upload_enabled:
+        return
+
     client = _get_client()
     client.delete_object(Bucket=stored_file.bucket, Key=stored_file.object_key)
 

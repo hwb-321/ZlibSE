@@ -1,11 +1,13 @@
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from ..models import StoredFile
+from ..models import Book, StoredFile
 
 
 def create_file_record(
     db: Session,
     *,
+    user_id: int | None,
     bucket: str,
     region: str,
     object_key: str,
@@ -16,6 +18,7 @@ def create_file_record(
     kind: str,
 ) -> StoredFile:
     stored_file = StoredFile(
+        user_id=user_id,
         bucket=bucket,
         region=region,
         object_key=object_key,
@@ -32,3 +35,17 @@ def create_file_record(
 
 def get_file(db: Session, file_id: int) -> StoredFile | None:
     return db.get(StoredFile, file_id)
+
+
+def is_file_referenced_by_book(db: Session, file_id: int) -> bool:
+    return (
+        db.query(Book.id)
+        .filter(
+            or_(
+                Book.book_file_id == file_id,
+                Book.cover_file_id == file_id,
+            )
+        )
+        .first()
+        is not None
+    )

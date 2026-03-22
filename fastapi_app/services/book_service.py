@@ -5,7 +5,7 @@ from pathlib import Path
 from fastapi import UploadFile
 from sqlalchemy.orm import Session
 
-from ..models import Book, StoredFile
+from ..models import Book, StoredFile, User
 from ..repositories.file_repository import create_file_record, get_file
 from .storage_service import delete_object, upload_upload_file
 
@@ -26,15 +26,39 @@ def _ensure_required_upload(upload: UploadFile | None, field_name: str) -> Uploa
 
 def _persist_uploaded_file(db: Session, upload: UploadFile, kind: str) -> StoredFile:
     payload = upload_upload_file(upload, kind)
-    return create_file_record(db, **payload)
+    return create_file_record(db, user_id=None, **payload)
 
 
-def _validate_file_refs(db: Session, book_file_id: int, cover_file_id: int | None) -> tuple[StoredFile, StoredFile | None]:
+def _ensure_file_access(
+    stored_file: StoredFile,
+    *,
+    current_user: User,
+    current_book: Book | None = None,
+) -> None:
+    if current_user.is_superuser:
+        return
+
+    if current_book and stored_file.id in {current_book.book_file_id, current_book.cover_file_id}:
+        return
+
+    if stored_file.user_id != current_user.id:
+        raise ValueError("fileId does not belong to current user")
+
+
+def _validate_file_refs(
+    db: Session,
+    book_file_id: int,
+    cover_file_id: int | None,
+    *,
+    current_user: User,
+    current_book: Book | None = None,
+) -> tuple[StoredFile, StoredFile | None]:
     book_file = get_file(db, book_file_id)
     if not book_file:
         raise ValueError("bookFileId does not exist")
     if book_file.kind != "book":
         raise ValueError("bookFileId must point to a book file")
+    _ensure_file_access(book_file, current_user=current_user, current_book=current_book)
 
     cover_file = None
     if cover_file_id is not None:
@@ -43,6 +67,7 @@ def _validate_file_refs(db: Session, book_file_id: int, cover_file_id: int | Non
             raise ValueError("coverFileId does not exist")
         if cover_file.kind != "cover":
             raise ValueError("coverFileId must point to a cover file")
+        _ensure_file_access(cover_file, current_user=current_user, current_book=current_book)
 
     return book_file, cover_file
 
@@ -102,6 +127,7 @@ def create_book_record(
 def create_book_from_file_ids(
     db: Session,
     *,
+    current_user: User,
     title: str,
     author: str | None,
     isbn: str | None,
@@ -111,7 +137,7 @@ def create_book_from_file_ids(
     book_file_id: int,
     cover_file_id: int | None,
 ) -> Book:
-    _validate_file_refs(db, book_file_id, cover_file_id)
+    _validate_file_refs(db, book_file_id, cover_file_id, current_user=current_user)
     return Book(
         title=title,
         author=author or None,
@@ -167,6 +193,7 @@ def update_book_from_file_ids(
     db: Session,
     *,
     book: Book,
+    current_user: User,
     title: str,
     author: str | None,
     isbn: str | None,
@@ -176,7 +203,13 @@ def update_book_from_file_ids(
     book_file_id: int,
     cover_file_id: int | None,
 ) -> Book:
-    _validate_file_refs(db, book_file_id, cover_file_id)
+    _validate_file_refs(
+        db,
+        book_file_id,
+        cover_file_id,
+        current_user=current_user,
+        current_book=book,
+    )
     book.title = title
     book.author = author or None
     book.isbn = isbn or None

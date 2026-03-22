@@ -9,8 +9,12 @@ server:
 
 # 安全相关配置。
 security:
-  # Session 签名密钥。
-  session_secret: dev-session-secret-change-me
+  # JWT 签名密钥。
+  jwt_secret_key: dev-jwt-secret-change-me-please-use-32bytes-min
+  # JWT 签名算法。
+  jwt_algorithm: HS256
+  # Access token 过期天数。
+  jwt_access_token_expire_days: 7
   # 是否启用登录/注册验证码。
   captcha_enabled: false
 
