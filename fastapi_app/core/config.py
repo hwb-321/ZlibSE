@@ -32,7 +32,7 @@ class SecurityConfig:
 
 @dataclass(frozen=True)
 class DatabaseConfig:
-    sqlite_path: Path
+    url: str
 
 
 @dataclass(frozen=True)
@@ -55,6 +55,18 @@ class BenchmarkConfig:
 
 
 @dataclass(frozen=True)
+class AsyncParseConfig:
+    enabled: bool = False
+    mode: str = "off"
+    broker: str = "rabbitmq"
+    broker_url: str = "amqp://guest:guest@127.0.0.1:5672/%2F"
+    queue_name: str = "zlibse.file.parse"
+    exchange_name: str = "zlibse.file"
+    routing_key: str = "parse"
+    task_ttl_seconds: int = 3600
+
+
+@dataclass(frozen=True)
 class RedisConfig:
     enabled: bool = False
     url: str = "redis://127.0.0.1:6379/0"
@@ -65,6 +77,20 @@ class RedisConfig:
     book_detail_ttl_seconds: int = 300
     token_version_ttl_seconds: int = 300
     file_meta_ttl_seconds: int = 300
+    empty_ttl_seconds: int = 30
+    lock_ttl_seconds: int = 10
+    bloom_expected_items: int = 10000
+    bloom_error_rate: float = 0.01
+
+
+@dataclass(frozen=True)
+class LocalCacheConfig:
+    enabled: bool = True
+    max_entries: int = 1024
+    default_ttl_seconds: int = 30
+    book_detail_ttl_seconds: int = 20
+    file_meta_ttl_seconds: int = 20
+    empty_ttl_seconds: int = 10
 
 
 @dataclass(frozen=True)
@@ -74,7 +100,9 @@ class AppConfig:
     database: DatabaseConfig
     storage: StorageConfig
     benchmark: BenchmarkConfig
+    async_parse: AsyncParseConfig
     redis: RedisConfig
+    local_cache: LocalCacheConfig
     cors_allow_origins: list[str]
 
 
@@ -106,7 +134,9 @@ def get_settings() -> AppConfig:
     database_raw = raw.get("database") or {}
     storage_raw = raw.get("storage") or {}
     benchmark_raw = raw.get("benchmark") or {}
+    async_parse_raw = raw.get("async_parse") or {}
     redis_raw = raw.get("redis") or {}
+    local_cache_raw = raw.get("local_cache") or {}
     cors_raw = raw.get("cors") or {}
 
     server = ServerConfig(
@@ -125,10 +155,14 @@ def get_settings() -> AppConfig:
         captcha_enabled=bool(security_raw.get("captcha_enabled", True)),
     )
 
-    sqlite_path = Path(database_raw.get("sqlite_path", "zlibse.db"))
-    if not sqlite_path.is_absolute():
-        sqlite_path = ROOT_DIR / sqlite_path
-    database = DatabaseConfig(sqlite_path=sqlite_path)
+    database_url = database_raw.get("url")
+    if database_url:
+        database = DatabaseConfig(url=str(database_url))
+    else:
+        sqlite_path = Path(database_raw.get("sqlite_path", "zlibse.db"))
+        if not sqlite_path.is_absolute():
+            sqlite_path = ROOT_DIR / sqlite_path
+        database = DatabaseConfig(url=f"sqlite:///{sqlite_path.as_posix()}")
 
     storage = StorageConfig(
         provider=str(storage_raw.get("provider", "cos")),
@@ -145,6 +179,16 @@ def get_settings() -> AppConfig:
     benchmark = BenchmarkConfig(
         mock_upload_enabled=bool(benchmark_raw.get("mock_upload_enabled", False)),
     )
+    async_parse = AsyncParseConfig(
+        enabled=bool(async_parse_raw.get("enabled", False)),
+        mode=str(async_parse_raw.get("mode", "off")).lower(),
+        broker=str(async_parse_raw.get("broker", "rabbitmq")),
+        broker_url=str(async_parse_raw.get("broker_url", "amqp://guest:guest@127.0.0.1:5672/%2F")),
+        queue_name=str(async_parse_raw.get("queue_name", "zlibse.file.parse")),
+        exchange_name=str(async_parse_raw.get("exchange_name", "zlibse.file")),
+        routing_key=str(async_parse_raw.get("routing_key", "parse")),
+        task_ttl_seconds=max(1, int(async_parse_raw.get("task_ttl_seconds", 3600))),
+    )
     redis = RedisConfig(
         enabled=bool(redis_raw.get("enabled", False)),
         url=str(redis_raw.get("url", "redis://127.0.0.1:6379/0")),
@@ -155,6 +199,18 @@ def get_settings() -> AppConfig:
         book_detail_ttl_seconds=max(1, int(redis_raw.get("book_detail_ttl_seconds", 300))),
         token_version_ttl_seconds=max(1, int(redis_raw.get("token_version_ttl_seconds", 300))),
         file_meta_ttl_seconds=max(1, int(redis_raw.get("file_meta_ttl_seconds", 300))),
+        empty_ttl_seconds=max(1, int(redis_raw.get("empty_ttl_seconds", 30))),
+        lock_ttl_seconds=max(1, int(redis_raw.get("lock_ttl_seconds", 10))),
+        bloom_expected_items=max(100, int(redis_raw.get("bloom_expected_items", 10000))),
+        bloom_error_rate=max(0.0001, float(redis_raw.get("bloom_error_rate", 0.01))),
+    )
+    local_cache = LocalCacheConfig(
+        enabled=bool(local_cache_raw.get("enabled", True)),
+        max_entries=max(16, int(local_cache_raw.get("max_entries", 1024))),
+        default_ttl_seconds=max(1, int(local_cache_raw.get("default_ttl_seconds", 30))),
+        book_detail_ttl_seconds=max(1, int(local_cache_raw.get("book_detail_ttl_seconds", 20))),
+        file_meta_ttl_seconds=max(1, int(local_cache_raw.get("file_meta_ttl_seconds", 20))),
+        empty_ttl_seconds=max(1, int(local_cache_raw.get("empty_ttl_seconds", 10))),
     )
 
     cors_allow_origins = _as_str_list(
@@ -172,6 +228,8 @@ def get_settings() -> AppConfig:
         database=database,
         storage=storage,
         benchmark=benchmark,
+        async_parse=async_parse,
         redis=redis,
+        local_cache=local_cache,
         cors_allow_origins=cors_allow_origins,
     )

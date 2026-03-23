@@ -6,6 +6,7 @@ from urllib.parse import quote_plus
 from ..core.config import get_settings
 from ..core.redis import get_redis_client
 from ..models import StoredFile
+from .local_cache_service import local_cache
 
 
 def _get_client():
@@ -148,4 +149,5 @@ def set_cached_public_file_meta(stored_file: StoredFile) -> None:
 def delete_cached_public_file_meta(file_id: int | None) -> None:
     if file_id is None:
         return
+    local_cache.delete(":".join(str(part) for part in build_file_meta_cache_key(file_id)))
     delete_key(*build_file_meta_cache_key(file_id))

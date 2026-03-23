@@ -16,6 +16,7 @@ def create_file_record(
     size: int,
     etag: str,
     kind: str,
+    file_hash: str | None = None,
 ) -> StoredFile:
     stored_file = StoredFile(
         user_id=user_id,
@@ -27,6 +28,7 @@ def create_file_record(
         size=size,
         etag=etag,
         kind=kind,
+        file_hash=file_hash or None,
     )
     db.add(stored_file)
     db.flush()
@@ -35,6 +37,50 @@ def create_file_record(
 
 def get_file(db: Session, file_id: int) -> StoredFile | None:
     return db.get(StoredFile, file_id)
+
+
+def get_file_by_object_key(db: Session, object_key: str) -> StoredFile | None:
+    return db.query(StoredFile).filter(StoredFile.object_key == object_key).first()
+
+
+def find_matching_file(
+    db: Session,
+    *,
+    user_id: int,
+    original_filename: str,
+    size: int,
+    kind: str,
+) -> StoredFile | None:
+    return (
+        db.query(StoredFile)
+        .filter(
+            StoredFile.user_id == user_id,
+            StoredFile.original_filename == original_filename,
+            StoredFile.size == size,
+            StoredFile.kind == kind,
+        )
+        .order_by(StoredFile.id.desc())
+        .first()
+    )
+
+
+def find_matching_file_by_hash(
+    db: Session,
+    *,
+    user_id: int,
+    file_hash: str,
+    kind: str,
+) -> StoredFile | None:
+    return (
+        db.query(StoredFile)
+        .filter(
+            StoredFile.user_id == user_id,
+            StoredFile.file_hash == file_hash,
+            StoredFile.kind == kind,
+        )
+        .order_by(StoredFile.id.desc())
+        .first()
+    )
 
 
 def is_file_referenced_by_book(db: Session, file_id: int) -> bool:

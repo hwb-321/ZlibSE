@@ -24,6 +24,8 @@ from ..services.cache_service import (
     get_json,
     set_json,
 )
+from ..services.bloom_service import mark_book_exists, may_have_book
+from ..services.hybrid_cache_service import EMPTY_MARKER, delete_cached, get_cached, set_cached
 
 router = APIRouter(tags=["books"])
 
@@ -68,8 +70,10 @@ def create_book(
     db.commit()
     db.refresh(book)
     bump_books_cache_version()
+    mark_book_exists(book.id)
     delete_cached_public_file_meta(book.book_file_id)
     delete_cached_public_file_meta(book.cover_file_id)
+    delete_cached(build_book_detail_cache_key(book.id))
     return {"success": True, "book": book_to_dict(book)}
 
 
@@ -117,6 +121,7 @@ def update_book(
     delete_cached_public_file_meta(old_cover_file_id)
     delete_cached_public_file_meta(book.book_file_id)
     delete_cached_public_file_meta(book.cover_file_id)
+    delete_cached(build_book_detail_cache_key(book.id))
     return {"success": True, "book": book_to_dict(book)}
 
 
@@ -149,16 +154,32 @@ def list_book(
 
 @router.get("/book/get_descriptions/{book_id}")
 def get_descriptions(book_id: int, db: Session = Depends(get_db)):
+    if not may_have_book(book_id):
+        raise HTTPException(status_code=404, detail="书籍不存在")
+
     cache_key = build_book_detail_cache_key(book_id)
-    cached = get_json(*cache_key)
+    cached = get_cached(cache_key, local_ttl_seconds=get_settings().local_cache.book_detail_ttl_seconds)
     if cached is not None:
+        if cached == EMPTY_MARKER:
+            raise HTTPException(status_code=404, detail="书籍不存在")
         return cached
 
     book = get_book(db, book_id)
     if not book:
+        set_cached(
+            cache_key,
+            EMPTY_MARKER,
+            redis_ttl_seconds=get_settings().redis.empty_ttl_seconds,
+            local_ttl_seconds=get_settings().local_cache.empty_ttl_seconds,
+        )
         raise HTTPException(status_code=404, detail="书籍不存在")
     result = build_book_detail(book)
-    set_json(*cache_key, value=result, ttl_seconds=get_settings().redis.book_detail_ttl_seconds)
+    set_cached(
+        cache_key,
+        result,
+        redis_ttl_seconds=get_settings().redis.book_detail_ttl_seconds,
+        local_ttl_seconds=get_settings().local_cache.book_detail_ttl_seconds,
+    )
     return result
 
 

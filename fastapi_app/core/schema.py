@@ -142,9 +142,12 @@ def init_schema() -> None:
         _add_column_if_missing("users", "token_version", "INTEGER NOT NULL DEFAULT 0")
     if "stored_files" in inspect(engine).get_table_names():
         _add_column_if_missing("stored_files", "user_id", "INTEGER")
+        _add_column_if_missing("stored_files", "file_hash", "VARCHAR(128)")
     if "books" in inspect(engine).get_table_names():
         _add_column_if_missing("books", "book_file_id", "INTEGER")
         _add_column_if_missing("books", "cover_file_id", "INTEGER")
+    if "upload_tasks" in inspect(engine).get_table_names():
+        _add_column_if_missing("upload_tasks", "file_hash", "VARCHAR(128)")
     Base.metadata.create_all(bind=engine)
     _backfill_legacy_local_files()
     _backfill_stored_file_owners()

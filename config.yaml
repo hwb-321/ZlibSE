@@ -7,7 +7,7 @@ server:
   # 开发环境下是否开启热重载。
   reload: false
   # Uvicorn worker 进程数。压测或生产环境可适当调大；开启 reload 时会自动退回为 1。
-  workers: 64
+  workers: 32
   # 是否打印逐条 HTTP 访问日志。压测时建议关闭，以减少终端输出和日志开销。
   access_log: false
 
@@ -24,14 +24,33 @@ security:
 
 # 数据库配置。
 database:
-  # SQLite 文件路径。相对路径默认以仓库根目录为基准。
-  sqlite_path: zlibse.db
+  # 数据库连接地址。
+  url: mysql+pymysql://root:5@4070s-linux.xinghen.ip-ddns.com:3306/zlibse?charset=utf8mb4
 
 # 压测辅助配置。
 benchmark:
   # 是否开启压测文件模拟上传模式。开启后，/api/files/upload-complete 会跳过 COS 对象检查，
   # 直接按请求体中的文件信息落库，便于本地压测时伪造上传成功的书籍文件。
   mock_upload_enabled: true
+
+# 文件后验异步解析配置。
+async_parse:
+  # 是否启用上传完成后的异步解析。
+  enabled: true
+  # 运行模式：off=关闭，mock=模拟解析，on=真实解析。
+  mode: on
+  # 消息队列类型，当前实现使用 RabbitMQ。
+  broker: rabbitmq
+  # RabbitMQ 连接地址。
+  broker_url: amqp://guest:guest@127.0.0.1:5672/%2F
+  # 解析任务交换机。
+  exchange_name: zlibse.file
+  # 解析任务队列。
+  queue_name: zlibse.file.parse
+  # 解析任务路由键。
+  routing_key: parse
+  # 解析任务锁与可见窗口 TTL。
+  task_ttl_seconds: 3600
 
 # Redis 配置。enabled=false 时会完全回退到数据库/原始逻辑。
 redis:
@@ -53,6 +72,29 @@ redis:
   token_version_ttl_seconds: 300
   # 下载元信息缓存 TTL。
   file_meta_ttl_seconds: 300
+  # 空值缓存 TTL。
+  empty_ttl_seconds: 30
+  # Redis 锁默认 TTL。
+  lock_ttl_seconds: 10
+  # 布隆过滤器预估元素个数。
+  bloom_expected_items: 10000
+  # 布隆过滤器误判率。
+  bloom_error_rate: 0.01
+
+# 本地缓存配置，用于构建 L1 + Redis 双缓存。
+local_cache:
+  # 是否启用本地缓存。
+  enabled: true
+  # 最大缓存条目数。
+  max_entries: 1024
+  # 默认 TTL。
+  default_ttl_seconds: 30
+  # 图书详情缓存 TTL。
+  book_detail_ttl_seconds: 20
+  # 文件元数据缓存 TTL。
+  file_meta_ttl_seconds: 20
+  # 本地空值缓存 TTL。
+  empty_ttl_seconds: 10
 
 # 跨域配置。
 cors:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import mimetypes
 import uuid
+from io import BytesIO
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote
@@ -54,9 +55,13 @@ def _build_object_key(kind: str, filename: str) -> str:
 
 
 def create_presigned_upload(filename: str, content_type: str, kind: str) -> dict:
-    settings = get_settings().storage
     object_key = _build_object_key(kind, filename)
-    normalized_content_type = content_type or _guess_content_type(filename)
+    return create_presigned_upload_for_object_key(object_key, content_type or _guess_content_type(filename))
+
+
+def create_presigned_upload_for_object_key(object_key: str, content_type: str) -> dict:
+    settings = get_settings().storage
+    normalized_content_type = content_type or "application/octet-stream"
     client = _get_client()
     upload_url = client.generate_presigned_url(
         "put_object",
@@ -109,6 +114,38 @@ def upload_upload_file(upload: UploadFile, kind: str) -> dict:
     }
 
 
+def upload_bytes(*, data: bytes, filename: str, content_type: str, kind: str) -> dict:
+    settings = get_settings().storage
+    object_key = _build_object_key(kind, filename)
+    client = _get_client()
+    client.upload_fileobj(
+        BytesIO(data),
+        settings.bucket,
+        object_key,
+        ExtraArgs={"ContentType": content_type},
+    )
+    metadata = client.head_object(Bucket=settings.bucket, Key=object_key)
+    return {
+        "bucket": settings.bucket,
+        "region": settings.region,
+        "object_key": object_key,
+        "original_filename": filename or Path(object_key).name,
+        "content_type": metadata.get("ContentType", content_type),
+        "size": int(metadata.get("ContentLength", len(data))),
+        "etag": str(metadata.get("ETag", "")).strip('"'),
+        "kind": _normalize_kind(kind),
+    }
+
+
+def download_object_bytes(stored_file: StoredFile) -> bytes:
+    if stored_file.bucket == LEGACY_LOCAL_BUCKET and stored_file.region == LEGACY_LOCAL_REGION:
+        return Path(stored_file.object_key).read_bytes()
+
+    client = _get_client()
+    response = client.get_object(Bucket=stored_file.bucket, Key=stored_file.object_key)
+    return response["Body"].read()
+
+
 def create_presigned_download_url(stored_file: StoredFile) -> str:
     if stored_file.bucket == LEGACY_LOCAL_BUCKET and stored_file.region == LEGACY_LOCAL_REGION:
         raise ValueError("Legacy local files do not have a direct COS download URL")
@@ -138,6 +175,14 @@ def delete_object(stored_file: StoredFile) -> None:
 
     client = _get_client()
     client.delete_object(Bucket=stored_file.bucket, Key=stored_file.object_key)
+
+
+def delete_object_by_key(object_key: str) -> None:
+    settings = get_settings().storage
+    if get_settings().benchmark.mock_upload_enabled:
+        return
+    client = _get_client()
+    client.delete_object(Bucket=settings.bucket, Key=object_key)
 
 
 def build_file_response(stored_file: StoredFile, *, force_download: bool = False):

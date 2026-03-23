@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from .config import get_settings
+from .database import SessionLocal
 from .paths import MEDIA_DIR, ensure_runtime_dirs
 from .schema import init_schema
 from ..routers.auth import router as auth_router
@@ -10,6 +11,7 @@ from ..routers.books import router as books_router
 from ..routers.favorites import router as favorites_router
 from ..routers.files import router as files_router
 from ..routers.uploads import router as uploads_router
+from ..services.bloom_service import warm_book_bloom
 
 
 def create_app() -> FastAPI:
@@ -30,6 +32,11 @@ def create_app() -> FastAPI:
     @app.on_event("startup")
     def startup_event() -> None:
         init_schema()
+        db = SessionLocal()
+        try:
+            warm_book_bloom(db)
+        finally:
+            db.close()
 
     app.include_router(auth_router)
     app.include_router(books_router)

@@ -8,3 +8,10 @@ PyYAML
 boto3
 PyJWT
 redis
+cachetools
+bloom-filter2
+pika
+PyMySQL
+EbookLib
+pypdf
+PyMuPDF
