@@ -45,6 +45,7 @@ export default {
     data() {
         return {
             uploadedBooks: [],
+            allUploadedBooks: [],
             searchQuery: ''
         };
     },
@@ -61,30 +62,29 @@ export default {
             try {
                 const response = await axios.get(`${appConfig.backendUrl}/user/get_upload_book_list`);
                 this.uploadedBooks = response.data.uploadedBooks;
+                this.allUploadedBooks = response.data.uploadedBooks;
             } catch (error) {
                 console.error('Error fetching uploaded books:', error);
             }
         },
         searchUploadedBooks() {
-        if (this.searchQuery.trim()) {
-            const lowerCaseQuery = this.searchQuery.toLowerCase();
-
-            // 在本地数据中搜索
-            this.uploadedBooks = this.uploadedBooks.filter(book => {
-                // 检查书籍的每个字段是否包含搜索词
-                return book.title.toLowerCase().includes(lowerCaseQuery) ||
-                       book.author.toLowerCase().includes(lowerCaseQuery) ||
-                       book.isbn.toLowerCase().includes(lowerCaseQuery) ||
-                       book.category.toLowerCase().includes(lowerCaseQuery) ||
-                       book.year.toString().toLowerCase().includes(lowerCaseQuery) ||
-                       book.language.toLowerCase().includes(lowerCaseQuery) ||
-                       book.file_type.toLowerCase().includes(lowerCaseQuery);
+            const query = this.searchQuery.trim().toLowerCase();
+            if (!query) {
+                this.uploadedBooks = this.allUploadedBooks;
+                return;
+            }
+            this.uploadedBooks = this.allUploadedBooks.filter((book) => {
+                return [
+                    book.title,
+                    book.author,
+                    book.isbn,
+                    book.category,
+                    book.year,
+                    book.language,
+                    book.file_type,
+                ].some((value) => String(value || '').toLowerCase().includes(query));
             });
-        } else {
-            // 如果搜索词为空，则重新获取所有书籍
-            this.fetchUploadedBooks();
-        }
-    },
+        },
         async handleBookDeleted() {
             await this.fetchUploadedBooks();
         }

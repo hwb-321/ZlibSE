@@ -34,6 +34,7 @@ export default {
         return {
             book: null,
             rendition: null,
+            bookUrl: '',
             toc: [],
             tocVisible: false,
             readerReady: false,
@@ -83,7 +84,11 @@ export default {
 
             this.downloadProgress = 100;
             this.loadingStage = '正在初始化阅读器...';
-            this.book = ePub(response.data);
+            const epubBlob = new Blob([response.data], {
+                type: 'application/epub+zip',
+            });
+            this.bookUrl = URL.createObjectURL(epubBlob);
+            this.book = ePub(this.bookUrl);
             this.rendition = this.book.renderTo(this.$refs.book, { width: '100%', height: '100%' });
             await this.rendition.display();
 
@@ -100,6 +105,9 @@ export default {
     beforeUnmount() {
         if (this.book?.destroy) {
             this.book.destroy();
+        }
+        if (this.bookUrl) {
+            URL.revokeObjectURL(this.bookUrl);
         }
     },
     methods: {

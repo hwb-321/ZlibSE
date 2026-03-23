@@ -11,12 +11,12 @@
                         <v-card-subtitle>{{ author }}</v-card-subtitle>
                     </div>
                     <v-card-text class="text-md-left text-center">
-                        <div>ISBN: {{ isbn }}</div>
-                        <div>种类: {{ category }}</div>
-                        <div>年份: {{ year }}</div>
-                        <div>语言: {{ language }}</div>
-                        <div>文件类型: {{ file_type }}</div>
-                        <div>文件大小: {{ formattedFileSize }}</div>
+                        <div>ISBN: {{ isbn || '暂无' }}</div>
+                        <div>种类: {{ category || '暂无' }}</div>
+                        <div>年份: {{ year || '暂无' }}</div>
+                        <div>语言: {{ language || '暂无' }}</div>
+                        <div>文件类型: {{ file_type || '未知' }}</div>
+                        <div>文件大小: {{ formattedFileSize || '未知' }}</div>
                     </v-card-text>
                     <v-card-actions class="justify-space-between">
                         <v-btn color="primary" variant="outlined" @click="downloadBook">
@@ -126,6 +126,7 @@ export default {
         },
         async downloadBook() {
             if (!this.book_file_id) {
+                alert('当前书籍缺少可下载文件');
                 return;
             }
             try {
@@ -156,6 +157,10 @@ export default {
             }
         },
         openOnlineReader() {
+            if (!this.book_file_id) {
+                alert('当前书籍缺少可阅读文件');
+                return;
+            }
             const readerUrl = `/online-reader-epub?bookId=${this.bookId}&fileId=${this.book_file_id}`;
             window.open(readerUrl, '_blank');
         },

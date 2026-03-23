@@ -1,4 +1,5 @@
 import axios from 'axios';
+import SparkMD5 from 'spark-md5';
 import appConfig from '@/config/appConfig.json';
 
 export function buildBackendUrl(path) {
@@ -11,7 +12,27 @@ export function buildBackendUrl(path) {
     return `${appConfig.backendUrl}${path}`;
 }
 
-export async function uploadFileToStorage(file, kind) {
+async function computeFileHash(file) {
+    if (!(file instanceof File) && !(file instanceof Blob)) {
+        return null;
+    }
+
+    const chunkSize = 2 * 1024 * 1024;
+    const spark = new SparkMD5.ArrayBuffer();
+    let offset = 0;
+
+    while (offset < file.size) {
+        const chunk = file.slice(offset, offset + chunkSize);
+        const buffer = await chunk.arrayBuffer();
+        spark.append(buffer);
+        offset += chunkSize;
+    }
+
+    return spark.end();
+}
+
+async function requestUpload(file, kind) {
+    const fileHash = await computeFileHash(file);
     const uploadUrlResponse = await axios.post(
         `${appConfig.backendUrl}/api/files/upload-url`,
         {
@@ -19,10 +40,22 @@ export async function uploadFileToStorage(file, kind) {
             contentType: file.type || 'application/octet-stream',
             size: file.size,
             kind,
+            fileHash,
         },
     );
 
-    const { objectKey, uploadUrl, headers } = uploadUrlResponse.data;
+    const { fileId, objectKey, uploadUrl, headers } = uploadUrlResponse.data;
+    if (fileId && !uploadUrl) {
+        return {
+            fileId,
+            alreadyUploaded: true,
+            parseStatus: kind === 'book' ? 'unknown' : 'skipped',
+        };
+    }
+    if (!uploadUrl || !objectKey) {
+        throw new Error('后端未返回有效的上传链接');
+    }
+
     const contentType = file.type || headers?.['Content-Type'] || 'application/octet-stream';
 
     const uploadResponse = await fetch(uploadUrl, {
@@ -50,7 +83,48 @@ export async function uploadFileToStorage(file, kind) {
         },
     );
 
-    return completeResponse.data.fileId;
+    return completeResponse.data;
+}
+
+export async function uploadFileToStorage(file, kind) {
+    const result = await requestUpload(file, kind);
+    return result.fileId;
+}
+
+export async function fetchParseResult(fileId) {
+    const response = await axios.get(`${appConfig.backendUrl}/api/files/${fileId}/parse-result`);
+    return response.data;
+}
+
+export async function waitForParseResult(fileId, options = {}) {
+    const {
+        timeoutMs = 30000,
+        intervalMs = 1000,
+    } = options;
+    const start = Date.now();
+
+    while (Date.now() - start < timeoutMs) {
+        const result = await fetchParseResult(fileId);
+        if (['done', 'failed', 'dispatch_failed', 'missing'].includes(result.status)) {
+            return result;
+        }
+        await new Promise((resolve) => {
+            window.setTimeout(resolve, intervalMs);
+        });
+    }
+
+    return {
+        status: 'timeout',
+    };
+}
+
+export async function uploadBookFileAndWaitForParse(file, options = {}) {
+    const uploadResult = await requestUpload(file, 'book');
+    const parseResult = await waitForParseResult(uploadResult.fileId, options);
+    return {
+        ...uploadResult,
+        parseResult,
+    };
 }
 
 export async function fetchDownloadUrl(fileId) {
@@ -60,5 +134,14 @@ export async function fetchDownloadUrl(fileId) {
 
 export async function downloadByFileId(fileId) {
     const downloadUrl = await fetchDownloadUrl(fileId);
-    window.location.href = downloadUrl;
+    if (!downloadUrl) {
+        throw new Error('后端未返回可用的下载链接');
+    }
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.rel = 'noopener noreferrer';
+    link.target = '_self';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
 }

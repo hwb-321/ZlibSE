@@ -46,6 +46,7 @@ export default {
     data() {
         return {
             books: [],
+            allBooks: [],
             searchQuery: ''
         };
     },
@@ -66,31 +67,29 @@ export default {
         async fetchFavorites() {
             try {
                 const response = await axios.get(`${appConfig.backendUrl}/user/favorites`);
-                console.log(response.data);
                 this.books = response.data.favorites;
+                this.allBooks = response.data.favorites;
             } catch (error) {
                 console.error('Error fetching favorites:', error);
             }
         },
         searchFavorites() {
-            if (this.searchQuery.trim()) {
-                const lowerCaseQuery = this.searchQuery.toLowerCase();
-
-                // 在本地数据中搜索
-                this.uploadedBooks = this.uploadedBooks.filter(book => {
-                    // 检查书籍的每个字段是否包含搜索词
-                    return book.title.toLowerCase().includes(lowerCaseQuery) ||
-                        book.author.toLowerCase().includes(lowerCaseQuery) ||
-                        book.isbn.toLowerCase().includes(lowerCaseQuery) ||
-                        book.category.toLowerCase().includes(lowerCaseQuery) ||
-                        book.year.toString().toLowerCase().includes(lowerCaseQuery) ||
-                        book.language.toLowerCase().includes(lowerCaseQuery) ||
-                        book.file_type.toLowerCase().includes(lowerCaseQuery);
-                });
-            } else {
-                // 如果搜索词为空，则重新获取所有书籍
-                this.fetchUploadedBooks();
+            const query = this.searchQuery.trim().toLowerCase();
+            if (!query) {
+                this.books = this.allBooks;
+                return;
             }
+            this.books = this.allBooks.filter((book) => {
+                return [
+                    book.title,
+                    book.author,
+                    book.isbn,
+                    book.category,
+                    book.year,
+                    book.language,
+                    book.file_type,
+                ].some((value) => String(value || '').toLowerCase().includes(query));
+            });
         },
     },
     created() {
