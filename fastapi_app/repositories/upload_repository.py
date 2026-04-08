@@ -11,8 +11,9 @@ def get_upload_relation(db: Session, user_id: int, book_id: int) -> UploadedBook
     )
 
 
-def list_uploaded_books(db: Session, user_id: int, is_superuser: bool) -> list[Book]:
+def list_uploaded_books(db: Session, user_id: int, is_superuser: bool, page: int, page_size: int) -> list[Book]:
+    offset = (page - 1) * page_size
     query = db.query(Book).join(UploadedBook, UploadedBook.book_id == Book.id)
     if not is_superuser:
         query = query.filter(UploadedBook.user_id == user_id)
-    return query.all()
+    return query.order_by(UploadedBook.uploaded_at.desc(), UploadedBook.id.desc()).offset(offset).limit(page_size).all()

@@ -15,7 +15,7 @@ def create_access_token(user: User) -> str:
     expire_at = now + timedelta(days=settings.security.jwt_access_token_expire_days)
     payload = {
         "sub": str(user.id),
-        "ver": user.token_version,
+        "auth_version": user.auth_token_version,
         "iat": now,
         "exp": expire_at,
     }
@@ -37,6 +37,6 @@ def decode_access_token(token: str) -> dict:
     except InvalidTokenError as exc:
         raise ValueError("Invalid token") from exc
 
-    if "sub" not in payload or "ver" not in payload:
+    if "sub" not in payload or "auth_version" not in payload:
         raise ValueError("Invalid token")
     return payload

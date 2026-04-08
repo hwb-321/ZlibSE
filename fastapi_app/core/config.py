@@ -33,6 +33,10 @@ class SecurityConfig:
 @dataclass(frozen=True)
 class DatabaseConfig:
     url: str
+    pool_size: int = 5
+    max_overflow: int = 10
+    pool_recycle_seconds: int = 1800
+    pool_timeout_seconds: int = 30
 
 
 @dataclass(frozen=True)
@@ -52,6 +56,10 @@ class StorageConfig:
 @dataclass(frozen=True)
 class BenchmarkConfig:
     mock_upload_enabled: bool = False
+    mock_file_object_key: str = "mock.txt"
+    mock_author: str = "Mock Parser"
+    mock_language: str = "zh-CN"
+    mock_page_count: int = 0
 
 
 @dataclass(frozen=True)
@@ -75,12 +83,15 @@ class RedisConfig:
     book_list_ttl_seconds: int = 120
     book_search_ttl_seconds: int = 120
     book_detail_ttl_seconds: int = 300
-    token_version_ttl_seconds: int = 300
+    auth_token_version_ttl_seconds: int = 300
+    user_profile_ttl_seconds: int = 300
     file_meta_ttl_seconds: int = 300
+    favorite_set_ttl_seconds: int = 300
     empty_ttl_seconds: int = 30
     lock_ttl_seconds: int = 10
     bloom_expected_items: int = 10000
     bloom_error_rate: float = 0.01
+    bloom_trusted_ttl_seconds: int = 10
 
 
 @dataclass(frozen=True)
@@ -88,9 +99,24 @@ class LocalCacheConfig:
     enabled: bool = True
     max_entries: int = 1024
     default_ttl_seconds: int = 30
-    book_detail_ttl_seconds: int = 20
     file_meta_ttl_seconds: int = 20
     empty_ttl_seconds: int = 10
+
+
+@dataclass(frozen=True)
+class SearchConfig:
+    min_query_length: int = 1
+    default_page_size: int = 10
+    max_page_size: int = 20
+    rate_limit_enabled: bool = False
+    rate_limit_window_seconds: int = 10
+    rate_limit_max_requests: int = 30
+
+
+@dataclass(frozen=True)
+class PaginationConfig:
+    default_page_size: int = 10
+    max_page_size: int = 20
 
 
 @dataclass(frozen=True)
@@ -103,6 +129,8 @@ class AppConfig:
     async_parse: AsyncParseConfig
     redis: RedisConfig
     local_cache: LocalCacheConfig
+    search: SearchConfig
+    pagination: PaginationConfig
     cors_allow_origins: list[str]
 
 
@@ -137,6 +165,8 @@ def get_settings() -> AppConfig:
     async_parse_raw = raw.get("async_parse") or {}
     redis_raw = raw.get("redis") or {}
     local_cache_raw = raw.get("local_cache") or {}
+    search_raw = raw.get("search") or {}
+    pagination_raw = raw.get("pagination") or {}
     cors_raw = raw.get("cors") or {}
 
     server = ServerConfig(
@@ -157,12 +187,24 @@ def get_settings() -> AppConfig:
 
     database_url = database_raw.get("url")
     if database_url:
-        database = DatabaseConfig(url=str(database_url))
+        database = DatabaseConfig(
+            url=str(database_url),
+            pool_size=max(1, int(database_raw.get("pool_size", 5))),
+            max_overflow=max(0, int(database_raw.get("max_overflow", 10))),
+            pool_recycle_seconds=max(30, int(database_raw.get("pool_recycle_seconds", 1800))),
+            pool_timeout_seconds=max(1, int(database_raw.get("pool_timeout_seconds", 30))),
+        )
     else:
         sqlite_path = Path(database_raw.get("sqlite_path", "zlibse.db"))
         if not sqlite_path.is_absolute():
             sqlite_path = ROOT_DIR / sqlite_path
-        database = DatabaseConfig(url=f"sqlite:///{sqlite_path.as_posix()}")
+        database = DatabaseConfig(
+            url=f"sqlite:///{sqlite_path.as_posix()}",
+            pool_size=max(1, int(database_raw.get("pool_size", 5))),
+            max_overflow=max(0, int(database_raw.get("max_overflow", 10))),
+            pool_recycle_seconds=max(30, int(database_raw.get("pool_recycle_seconds", 1800))),
+            pool_timeout_seconds=max(1, int(database_raw.get("pool_timeout_seconds", 30))),
+        )
 
     storage = StorageConfig(
         provider=str(storage_raw.get("provider", "cos")),
@@ -178,6 +220,10 @@ def get_settings() -> AppConfig:
     )
     benchmark = BenchmarkConfig(
         mock_upload_enabled=bool(benchmark_raw.get("mock_upload_enabled", False)),
+        mock_file_object_key=str(benchmark_raw.get("mock_file_object_key", "mock.txt")).strip() or "mock.txt",
+        mock_author=str(benchmark_raw.get("mock_author", "Mock Parser")).strip() or "Mock Parser",
+        mock_language=str(benchmark_raw.get("mock_language", "zh-CN")).strip() or "zh-CN",
+        mock_page_count=max(0, int(benchmark_raw.get("mock_page_count", 0))),
     )
     async_parse = AsyncParseConfig(
         enabled=bool(async_parse_raw.get("enabled", False)),
@@ -197,20 +243,34 @@ def get_settings() -> AppConfig:
         book_list_ttl_seconds=max(1, int(redis_raw.get("book_list_ttl_seconds", 120))),
         book_search_ttl_seconds=max(1, int(redis_raw.get("book_search_ttl_seconds", 120))),
         book_detail_ttl_seconds=max(1, int(redis_raw.get("book_detail_ttl_seconds", 300))),
-        token_version_ttl_seconds=max(1, int(redis_raw.get("token_version_ttl_seconds", 300))),
+        auth_token_version_ttl_seconds=max(1, int(redis_raw.get("auth_token_version_ttl_seconds", 300))),
+        user_profile_ttl_seconds=max(1, int(redis_raw.get("user_profile_ttl_seconds", 300))),
         file_meta_ttl_seconds=max(1, int(redis_raw.get("file_meta_ttl_seconds", 300))),
+        favorite_set_ttl_seconds=max(1, int(redis_raw.get("favorite_set_ttl_seconds", 300))),
         empty_ttl_seconds=max(1, int(redis_raw.get("empty_ttl_seconds", 30))),
         lock_ttl_seconds=max(1, int(redis_raw.get("lock_ttl_seconds", 10))),
         bloom_expected_items=max(100, int(redis_raw.get("bloom_expected_items", 10000))),
         bloom_error_rate=max(0.0001, float(redis_raw.get("bloom_error_rate", 0.01))),
+        bloom_trusted_ttl_seconds=max(1, int(redis_raw.get("bloom_trusted_ttl_seconds", 10))),
     )
     local_cache = LocalCacheConfig(
         enabled=bool(local_cache_raw.get("enabled", True)),
         max_entries=max(16, int(local_cache_raw.get("max_entries", 1024))),
         default_ttl_seconds=max(1, int(local_cache_raw.get("default_ttl_seconds", 30))),
-        book_detail_ttl_seconds=max(1, int(local_cache_raw.get("book_detail_ttl_seconds", 20))),
         file_meta_ttl_seconds=max(1, int(local_cache_raw.get("file_meta_ttl_seconds", 20))),
         empty_ttl_seconds=max(1, int(local_cache_raw.get("empty_ttl_seconds", 10))),
+    )
+    search = SearchConfig(
+        min_query_length=max(1, int(search_raw.get("min_query_length", 1))),
+        default_page_size=max(1, int(search_raw.get("default_page_size", 10))),
+        max_page_size=max(1, int(search_raw.get("max_page_size", 20))),
+        rate_limit_enabled=bool(search_raw.get("rate_limit_enabled", False)),
+        rate_limit_window_seconds=max(1, int(search_raw.get("rate_limit_window_seconds", 10))),
+        rate_limit_max_requests=max(1, int(search_raw.get("rate_limit_max_requests", 30))),
+    )
+    pagination = PaginationConfig(
+        default_page_size=max(1, int(pagination_raw.get("default_page_size", 10))),
+        max_page_size=max(1, int(pagination_raw.get("max_page_size", 20))),
     )
 
     cors_allow_origins = _as_str_list(
@@ -231,5 +291,7 @@ def get_settings() -> AppConfig:
         async_parse=async_parse,
         redis=redis,
         local_cache=local_cache,
+        search=search,
+        pagination=pagination,
         cors_allow_origins=cors_allow_origins,
     )

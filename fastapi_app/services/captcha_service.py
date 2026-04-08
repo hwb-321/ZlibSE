@@ -20,7 +20,7 @@ def generate_captcha_payload() -> dict:
     return {
         "captchaEnabled": True,
         "key": key,
-        "image_url": f"/user/captcha/image/{key}",
+        "image_url": f"/api/auth/captcha/{key}/image",
     }
 
 

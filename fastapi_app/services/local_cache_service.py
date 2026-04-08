@@ -10,8 +10,10 @@ from ..core.config import get_settings
 
 class LocalTTLCache:
     def __init__(self) -> None:
-        settings = get_settings().local_cache
-        self._enabled = settings.enabled
+        app_settings = get_settings()
+        settings = app_settings.local_cache
+        # L1 cache is only meaningful when Redis is enabled as the shared cache/version source.
+        self._enabled = bool(app_settings.redis.enabled and settings.enabled)
         self._cache: TTLCache[str, object] = TTLCache(maxsize=settings.max_entries, ttl=settings.default_ttl_seconds)
         self._expires_at: dict[str, float] = {}
         self._lock = Lock()

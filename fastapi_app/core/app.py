@@ -1,11 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 
 from .config import get_settings
 from .database import SessionLocal
-from .paths import MEDIA_DIR, ensure_runtime_dirs
-from .schema import init_schema
 from ..routers.auth import router as auth_router
 from ..routers.books import router as books_router
 from ..routers.favorites import router as favorites_router
@@ -15,7 +12,6 @@ from ..services.bloom_service import warm_book_bloom
 
 
 def create_app() -> FastAPI:
-    ensure_runtime_dirs()
     settings = get_settings()
 
     app = FastAPI(title="ZlibSE FastAPI")
@@ -26,17 +22,18 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    if MEDIA_DIR.exists():
-        app.mount("/media", StaticFiles(directory=str(MEDIA_DIR)), name="media")
 
     @app.on_event("startup")
     def startup_event() -> None:
-        init_schema()
         db = SessionLocal()
         try:
             warm_book_bloom(db)
         finally:
             db.close()
+
+    @app.get("/ping", tags=["health"])
+    async def ping() -> dict[str, str]:
+        return {"msg": "hello world"}
 
     app.include_router(auth_router)
     app.include_router(books_router)

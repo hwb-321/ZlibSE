@@ -7,6 +7,7 @@ from tempfile import NamedTemporaryFile
 
 from pypdf import PdfReader
 
+from ..core.config import get_settings
 from ..models import StoredFile
 from .storage_service import download_object_bytes
 
@@ -22,14 +23,7 @@ def _parse_epub_bytes(payload: bytes) -> dict:
     title = _first_or_none(book.get_metadata("DC", "title"))
     author = _first_or_none(book.get_metadata("DC", "creator"))
     language = _first_or_none(book.get_metadata("DC", "language"))
-    cover_name = None
-    cover_bytes = None
-
-    for item in book.get_items():
-        if getattr(item, "media_type", "") and str(item.media_type).startswith("image/"):
-            cover_name = Path(getattr(item, "file_name", "cover.jpg")).name
-            cover_bytes = item.get_content()
-            break
+    cover_name, cover_bytes = _extract_epub_cover(book)
 
     return {
         "title": _metadata_text(title),
@@ -48,6 +42,79 @@ def _parse_epub_bytes(payload: bytes) -> dict:
         "cover_bytes": cover_bytes,
         "cover_content_type": _guess_image_type(cover_name),
     }
+
+
+def _extract_epub_cover(book) -> tuple[str | None, bytes | None]:
+    image_items = []
+    for item in book.get_items():
+        media_type = str(getattr(item, "media_type", "") or "")
+        if media_type.startswith("image/"):
+            image_items.append(item)
+
+    if not image_items:
+        return None, None
+
+    cover_id = _find_epub_cover_id(book)
+    if cover_id:
+        matched = _match_epub_image(image_items, cover_id)
+        if matched is not None:
+            return Path(getattr(matched, "file_name", "cover.jpg")).name, matched.get_content()
+
+    named_cover = _match_named_cover_image(image_items)
+    if named_cover is not None:
+        return Path(getattr(named_cover, "file_name", "cover.jpg")).name, named_cover.get_content()
+
+    cover_href = _find_epub_cover_href(book)
+    if cover_href:
+        matched = _match_epub_image(image_items, cover_href)
+        if matched is not None:
+            return Path(getattr(matched, "file_name", "cover.jpg")).name, matched.get_content()
+
+    largest = max(image_items, key=lambda item: len(item.get_content()), default=None)
+    if largest is None:
+        return None, None
+    return Path(getattr(largest, "file_name", "cover.jpg")).name, largest.get_content()
+
+
+def _find_epub_cover_id(book) -> str | None:
+    for _value, attrs in book.get_metadata("OPF", "meta"):
+        if attrs.get("name") == "cover" and attrs.get("content"):
+            return str(attrs["content"])
+    return None
+
+
+def _find_epub_cover_href(book) -> str | None:
+    for item in book.get_items():
+        file_name = str(getattr(item, "file_name", "") or "").lower()
+        if file_name.endswith("cover.xhtml") or file_name.endswith("cover.html"):
+            text = item.get_content().decode("utf-8", errors="ignore").lower()
+            marker = "href=\""
+            idx = text.find(marker)
+            if idx == -1:
+                continue
+            href = text[idx + len(marker):].split("\"", 1)[0]
+            return Path(href).name
+    return None
+
+
+def _match_epub_image(image_items, target: str):
+    normalized = str(target).lower()
+    normalized_name = Path(normalized).name
+    for item in image_items:
+        item_id = str(getattr(item, "id", "") or "").lower()
+        item_name = str(getattr(item, "file_name", "") or "").lower()
+        if item_id == normalized or Path(item_name).name == normalized_name:
+            return item
+    return None
+
+
+def _match_named_cover_image(image_items):
+    for item in image_items:
+        item_name = str(getattr(item, "file_name", "") or "").lower()
+        basename = Path(item_name).stem
+        if basename == "cover" or basename.endswith("_cover") or basename.endswith("-cover"):
+            return item
+    return None
 
 
 def _parse_pdf_bytes(payload: bytes) -> dict:
@@ -88,17 +155,19 @@ def _parse_pdf_bytes(payload: bytes) -> dict:
     }
 
 
-def _build_mock_result(stored_file: StoredFile) -> dict:
-    stem = Path(stored_file.original_filename).stem
+def build_server_mock_parse_result(stored_file: StoredFile) -> dict:
+    settings = get_settings().benchmark
+    stem = Path(stored_file.original_filename).stem or "Mock Book"
     return {
         "title": stem,
-        "author": "Mock Parser",
-        "language": "zh-CN",
-        "page_count": 0,
+        "author": settings.mock_author,
+        "language": settings.mock_language,
+        "page_count": settings.mock_page_count,
         "raw_metadata": json.dumps(
             {
+                "mode": "server-mock",
                 "filename": stored_file.original_filename,
-                "mode": "mock",
+                "kind": stored_file.kind,
             },
             ensure_ascii=False,
         ),
@@ -109,8 +178,6 @@ def _build_mock_result(stored_file: StoredFile) -> dict:
 
 
 def parse_file_metadata(stored_file: StoredFile, *, mode: str) -> dict:
-    if mode == "mock":
-        return _build_mock_result(stored_file)
     if mode == "off":
         raise ValueError("Parser mode is disabled")
 

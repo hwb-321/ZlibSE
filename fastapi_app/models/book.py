@@ -9,53 +9,27 @@ from .user import User
 
 class StoredFile(Base):
     __tablename__ = "stored_files"
-    __table_args__ = (
-        UniqueConstraint("object_key", name="uq_stored_files_object_key"),
-        UniqueConstraint("user_id", "kind", "file_hash", name="uq_stored_files_user_kind_hash"),
-    )
+    __table_args__ = (UniqueConstraint("object_key", name="uq_stored_files_object_key"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
-    bucket: Mapped[str] = mapped_column(String(100))
-    region: Mapped[str] = mapped_column(String(50))
-    object_key: Mapped[str] = mapped_column(String(500))
+    bucket: Mapped[str] = mapped_column(String(100), default="")
+    region: Mapped[str] = mapped_column(String(50), default="")
+    object_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
     original_filename: Mapped[str] = mapped_column(String(255))
     content_type: Mapped[str] = mapped_column(String(100), default="application/octet-stream")
     size: Mapped[int] = mapped_column(Integer, default=0)
     etag: Mapped[str] = mapped_column(String(100), default="")
     kind: Mapped[str] = mapped_column(String(50))
     file_hash: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    ref_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    upload_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    upload_status: Mapped[str] = mapped_column(String(50), default="init", nullable=False, index=True)
+    parse_status: Mapped[str] = mapped_column(String(50), default="not_started", nullable=False, index=True)
+    bind_status: Mapped[str] = mapped_column(String(50), default="unbound", nullable=False, index=True)
+    upload_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     user: Mapped[User | None] = relationship()
-
-
-class UploadTask(Base):
-    __tablename__ = "upload_tasks"
-    __table_args__ = (
-        UniqueConstraint("user_id", "kind", "file_hash", name="uq_upload_tasks_user_kind_hash"),
-    )
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
-    original_filename: Mapped[str] = mapped_column(String(255), index=True)
-    content_type: Mapped[str] = mapped_column(String(100), default="application/octet-stream")
-    size: Mapped[int] = mapped_column(Integer, default=0)
-    kind: Mapped[str] = mapped_column(String(50), index=True)
-    file_hash: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
-    object_key: Mapped[str] = mapped_column(String(500), unique=True, index=True)
-    status: Mapped[str] = mapped_column(String(50), default="init", index=True)
-    file_id: Mapped[int | None] = mapped_column(ForeignKey("stored_files.id", ondelete="SET NULL"), nullable=True)
-    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime,
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow,
-        index=True,
-    )
-
-    user: Mapped[User] = relationship()
-    file: Mapped[StoredFile | None] = relationship()
 
 
 class FileParseResult(Base):
@@ -90,7 +64,7 @@ class Book(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     title: Mapped[str] = mapped_column(String(200))
     author: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    isbn: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    isbn: Mapped[str | None] = mapped_column(String(50), nullable=True)
     category: Mapped[str | None] = mapped_column(String(100), nullable=True)
     year: Mapped[int | None] = mapped_column(Integer, nullable=True)
     language: Mapped[str | None] = mapped_column(String(50), nullable=True)

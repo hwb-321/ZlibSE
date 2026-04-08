@@ -1,7 +1,8 @@
-from sqlalchemy import or_
+from datetime import datetime
+
 from sqlalchemy.orm import Session
 
-from ..models import Book, StoredFile
+from ..models import StoredFile
 
 
 def create_file_record(
@@ -17,6 +18,11 @@ def create_file_record(
     etag: str,
     kind: str,
     file_hash: str | None = None,
+    upload_url: str | None = None,
+    upload_status: str = "uploaded",
+    parse_status: str = "not_started",
+    bind_status: str = "unbound",
+    upload_expires_at: datetime | None = None,
 ) -> StoredFile:
     stored_file = StoredFile(
         user_id=user_id,
@@ -29,6 +35,11 @@ def create_file_record(
         etag=etag,
         kind=kind,
         file_hash=file_hash or None,
+        upload_url=upload_url,
+        upload_status=upload_status,
+        parse_status=parse_status,
+        bind_status=bind_status,
+        upload_expires_at=upload_expires_at,
     )
     db.add(stored_file)
     db.flush()
@@ -37,31 +48,6 @@ def create_file_record(
 
 def get_file(db: Session, file_id: int) -> StoredFile | None:
     return db.get(StoredFile, file_id)
-
-
-def get_file_by_object_key(db: Session, object_key: str) -> StoredFile | None:
-    return db.query(StoredFile).filter(StoredFile.object_key == object_key).first()
-
-
-def find_matching_file(
-    db: Session,
-    *,
-    user_id: int,
-    original_filename: str,
-    size: int,
-    kind: str,
-) -> StoredFile | None:
-    return (
-        db.query(StoredFile)
-        .filter(
-            StoredFile.user_id == user_id,
-            StoredFile.original_filename == original_filename,
-            StoredFile.size == size,
-            StoredFile.kind == kind,
-        )
-        .order_by(StoredFile.id.desc())
-        .first()
-    )
 
 
 def find_matching_file_by_hash(
@@ -83,15 +69,14 @@ def find_matching_file_by_hash(
     )
 
 
-def is_file_referenced_by_book(db: Session, file_id: int) -> bool:
+def get_unbound_book_file_for_user(db: Session, user_id: int) -> StoredFile | None:
     return (
-        db.query(Book.id)
+        db.query(StoredFile)
         .filter(
-            or_(
-                Book.book_file_id == file_id,
-                Book.cover_file_id == file_id,
-            )
+            StoredFile.user_id == user_id,
+            StoredFile.kind == "book",
+            StoredFile.bind_status == "unbound",
         )
+        .order_by(StoredFile.id.desc())
         .first()
-        is not None
     )

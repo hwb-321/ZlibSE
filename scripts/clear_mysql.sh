@@ -72,14 +72,14 @@ MYSQL_ARGS=(
 
 mysql "${MYSQL_ARGS[@]}" <<'SQL'
 SET FOREIGN_KEY_CHECKS = 0;
-TRUNCATE TABLE file_parse_results;
-TRUNCATE TABLE upload_tasks;
-TRUNCATE TABLE uploaded_books;
-TRUNCATE TABLE user_collected_books;
-TRUNCATE TABLE books;
-TRUNCATE TABLE stored_files;
-TRUNCATE TABLE users;
+DROP TABLE IF EXISTS file_parse_results;
+DROP TABLE IF EXISTS upload_tasks;
+DROP TABLE IF EXISTS uploaded_books;
+DROP TABLE IF EXISTS user_collected_books;
+DROP TABLE IF EXISTS books;
+DROP TABLE IF EXISTS stored_files;
+DROP TABLE IF EXISTS users;
 SET FOREIGN_KEY_CHECKS = 1;
 SQL
 
-echo "Cleared MySQL business tables in database: $DB_NAME"
+echo "Dropped MySQL business tables in database: $DB_NAME"

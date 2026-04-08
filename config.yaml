@@ -7,7 +7,7 @@ server:
   # 开发环境下是否开启热重载。
   reload: false
   # Uvicorn worker 进程数。压测或生产环境可适当调大；开启 reload 时会自动退回为 1。
-  workers: 32
+  workers: 8
   # 是否打印逐条 HTTP 访问日志。压测时建议关闭，以减少终端输出和日志开销。
   access_log: false
 
@@ -24,20 +24,36 @@ security:
 
 # 数据库配置。
 database:
-  # 数据库连接地址。
-  url: mysql+pymysql://root:5@4070s-linux.xinghen.ip-ddns.com:3306/zlibse?charset=utf8mb4
+  # 数据库连接地址。当前已切到新的腾讯云实例，数据库名仍按 zlibse 访问；
+  # 但 Administrator 账号目前仅验证到“可登录实例”，尚未获得 zlibse 库权限，授权完成前后端连库会失败。
+  url: mysql+pymysql://Administrator:tU5W83S%5EL%3A%2FacN@bj-cynosdbmysql-grp-hrtwguje.sql.tencentcdb.com:22285/zlibse?charset=utf8mb4
+  # SQLAlchemy 连接池常驻连接数。
+  pool_size: 2
+  # 常驻连接不够时允许临时创建的额外连接数。
+  max_overflow: 2
+  # 连接回收时间，单位秒。用于避免长连接失效。
+  pool_recycle_seconds: 1800
+  # 从连接池获取连接的超时时间，单位秒。
+  pool_timeout_seconds: 30
 
 # 压测辅助配置。
 benchmark:
-  # 是否开启压测文件模拟上传模式。开启后，/api/files/upload-complete 会跳过 COS 对象检查，
-  # 直接按请求体中的文件信息落库，便于本地压测时伪造上传成功的书籍文件。
+  # 是否开启服务端压测 mock。开启后跳过真实上传、真实解析，直接写入默认元数据。
   mock_upload_enabled: true
+  # server-mock 下统一返回的固定对象 key，例如存储桶根路径下的 mock.txt。
+  mock_file_object_key: mock.txt
+  # server-mock 下写入 file_parse_results 的默认作者。
+  mock_author: Mock Parser
+  # server-mock 下写入 file_parse_results 的默认语言。
+  mock_language: zh-CN
+  # server-mock 下写入 file_parse_results 的默认页数。
+  mock_page_count: 0
 
 # 文件后验异步解析配置。
 async_parse:
   # 是否启用上传完成后的异步解析。
   enabled: true
-  # 运行模式：off=关闭，mock=模拟解析，on=真实解析。
+  # 运行模式：off=关闭，on=真实解析。server-mock 下会直接跳过真实解析。
   mode: on
   # 消息队列类型，当前实现使用 RabbitMQ。
   broker: rabbitmq
@@ -68,10 +84,14 @@ redis:
   book_search_ttl_seconds: 120
   # 书籍详情缓存 TTL。
   book_detail_ttl_seconds: 300
-  # token_version 缓存 TTL。
-  token_version_ttl_seconds: 300
+  # auth_token_version 缓存 TTL。
+  auth_token_version_ttl_seconds: 300
+  # 用户基础信息缓存 TTL。用于鉴权命中后直接复用用户 id、用户名、管理员标记和 auth_token_version。
+  user_profile_ttl_seconds: 300
   # 下载元信息缓存 TTL。
   file_meta_ttl_seconds: 300
+  # 用户收藏书籍 id 集合缓存 TTL。用于快速判断某本书是否已收藏。
+  favorite_set_ttl_seconds: 300
   # 空值缓存 TTL。
   empty_ttl_seconds: 30
   # Redis 锁默认 TTL。
@@ -80,21 +100,45 @@ redis:
   bloom_expected_items: 10000
   # 布隆过滤器误判率。
   bloom_error_rate: 0.01
+  # 进程内布隆过滤器的可信时长，单位秒。未命中且仍在可信窗口内时，可直接拒绝明显非法的 book_id。
+  bloom_trusted_ttl_seconds: 10
 
 # 本地缓存配置，用于构建 L1 + Redis 双缓存。
 local_cache:
-  # 是否启用本地缓存。
-  enabled: true
+  # 是否启用本地一级缓存。
+  # 只有当 redis.enabled=true 且 local_cache.enabled=true 时，才会形成“一级缓存 + Redis + 数据库”三层模式。
+  # 如果 redis.enabled=false，则这里即使为 true 也不会单独启用一级缓存，而是直接退回“只有数据库”。
+  enabled: false
   # 最大缓存条目数。
   max_entries: 1024
   # 默认 TTL。
   default_ttl_seconds: 30
-  # 图书详情缓存 TTL。
-  book_detail_ttl_seconds: 20
   # 文件元数据缓存 TTL。
   file_meta_ttl_seconds: 20
   # 本地空值缓存 TTL。
   empty_ttl_seconds: 10
+
+# 搜索配置。
+search:
+  # 搜索关键字最小长度。默认 1，表示只拦截空字符串，不拦截单字搜索。
+  min_query_length: 1
+  # 搜索接口默认每页返回条数。
+  default_page_size: 10
+  # 搜索接口允许的最大每页返回条数。
+  max_page_size: 20
+  # 是否开启搜索限流保护。开启后会按客户端 IP 在时间窗口内限流，防止搜索请求把数据库打穿。
+  rate_limit_enabled: false
+  # 搜索限流窗口大小，单位秒。
+  rate_limit_window_seconds: 10
+  # 搜索限流窗口内允许的最大请求次数。
+  rate_limit_max_requests: 30
+
+# 通用分页配置。
+pagination:
+  # 收藏列表、上传列表、书籍列表等分页接口的默认每页返回条数。
+  default_page_size: 10
+  # 收藏列表、上传列表、书籍列表等分页接口允许的最大每页返回条数。
+  max_page_size: 20
 
 # 跨域配置。
 cors:

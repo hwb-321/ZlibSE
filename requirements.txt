@@ -12,6 +12,7 @@ cachetools
 bloom-filter2
 pika
 PyMySQL
+cryptography
 EbookLib
 pypdf
 PyMuPDF

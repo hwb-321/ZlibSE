@@ -14,5 +14,5 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(254), default="")
     password_hash: Mapped[str] = mapped_column(String(255))
     is_superuser: Mapped[bool] = mapped_column(Boolean, default=False)
-    token_version: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    auth_token_version: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

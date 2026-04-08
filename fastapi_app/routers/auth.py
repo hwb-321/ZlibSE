@@ -8,7 +8,12 @@ from ..core.jwt import create_access_token
 from ..core.security import hash_password, verify_password
 from ..models import User
 from ..repositories.user_repository import get_user_by_username
-from ..services.cache_service import delete_cached_token_version, set_cached_token_version
+from ..services.cache_service import (
+    delete_cached_auth_token_version,
+    delete_cached_user_profile,
+    set_cached_auth_token_version,
+    set_cached_user_profile,
+)
 from ..services.captcha_service import (
     generate_captcha_payload,
     is_captcha_enabled,
@@ -19,12 +24,12 @@ from ..services.captcha_service import (
 router = APIRouter(tags=["auth"])
 
 
-@router.get("/user/generate_captcha")
+@router.get("/api/auth/captcha")
 def generate_captcha() -> dict:
     return generate_captcha_payload()
 
 
-@router.get("/user/captcha/image/{captcha_key}")
+@router.get("/api/auth/captcha/{captcha_key}/image")
 def get_captcha_image(captcha_key: str) -> Response:
     png = render_captcha_image(captcha_key)
     if not png:
@@ -32,8 +37,8 @@ def get_captcha_image(captcha_key: str) -> Response:
     return Response(content=png, media_type="image/png")
 
 
-@router.post("/user/register_user")
-def register_user(
+@router.post("/api/auth/register")
+def register(
     username: str = Form(...),
     email: str = Form(""),
     password: str = Form(...),
@@ -59,8 +64,8 @@ def register_user(
     return {"success": True, "message": "????"}
 
 
-@router.post("/user/login_user")
-def login_user(
+@router.post("/api/auth/login")
+def login(
     username: str = Form(...),
     password: str = Form(...),
     captcha_key: str = Form(""),
@@ -73,7 +78,8 @@ def login_user(
     user = get_user_by_username(db, username)
     if not user or not verify_password(password, user.password_hash):
         return JSONResponse({"success": False, "error": "Invalid credentials"})
-    set_cached_token_version(user.id, user.token_version)
+    set_cached_auth_token_version(user.id, user.auth_token_version)
+    set_cached_user_profile(user)
 
     return {
         "success": True,
@@ -81,8 +87,8 @@ def login_user(
         "token_type": "bearer",
     }
 
-@router.get("/user/check_auth")
-def check_auth(current_user: User = Depends(get_current_user)):
+@router.get("/api/auth/me")
+def get_current_auth(current_user: User = Depends(get_current_user)):
     return {
         "isLoggedIn": True,
         "captchaEnabled": is_captcha_enabled(),
@@ -94,8 +100,8 @@ def check_auth(current_user: User = Depends(get_current_user)):
     }
 
 
-@router.post("/user/change_password_user")
-def change_password_user(
+@router.put("/api/users/me/password")
+def change_password(
     current_password: str = Form(...),
     new_password: str = Form(...),
     current_user: User = Depends(get_current_user_strict),
@@ -105,9 +111,11 @@ def change_password_user(
         return JSONResponse({"success": False, "message": "???????"}, status_code=400)
 
     current_user.password_hash = hash_password(new_password)
-    current_user.token_version += 1
+    current_user.auth_token_version += 1
     db.add(current_user)
     db.commit()
-    delete_cached_token_version(current_user.id)
-    set_cached_token_version(current_user.id, current_user.token_version)
+    delete_cached_auth_token_version(current_user.id)
+    delete_cached_user_profile(current_user.id)
+    set_cached_auth_token_version(current_user.id, current_user.auth_token_version)
+    set_cached_user_profile(current_user)
     return {"success": True, "message": "?????"}

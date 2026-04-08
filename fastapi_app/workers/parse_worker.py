@@ -8,12 +8,11 @@ from ..core.config import get_settings
 from ..core.database import SessionLocal
 from ..models import StoredFile
 from ..repositories.file_repository import create_file_record, get_file
-from ..repositories.upload_task_repository import (
+from ..repositories.parse_result_repository import (
     get_file_parse_result,
     get_or_create_file_parse_result,
-    get_upload_task_by_object_key,
-    mark_upload_task_status,
 )
+from ..services.cache_service import add_unbound_cover_id
 from ..services.lock_service import acquire_lock, build_lock_value, release_lock
 from ..services.parse_service import parse_file_metadata
 from ..services.storage_service import upload_bytes
@@ -44,46 +43,60 @@ def _handle_message(channel, method, _properties, body: bytes) -> None:
 
     db = SessionLocal()
     try:
-        stored_file = get_file(db, file_id)
-        if not stored_file:
-            channel.basic_ack(delivery_tag=method.delivery_tag)
-            return
-
-        parse_result = get_or_create_file_parse_result(db, file_id, parser_mode=parser_mode)
-        if parse_result.status == "done":
-            channel.basic_ack(delivery_tag=method.delivery_tag)
-            return
-
-        parse_result.status = "processing"
-        db.add(parse_result)
-        db.commit()
-
-        result = parse_file_metadata(stored_file, mode=parser_mode)
-        cover_file_id = _maybe_store_cover(db, stored_file, result)
-        parse_result.title = result.get("title")
-        parse_result.author = result.get("author")
-        parse_result.language = result.get("language")
-        parse_result.page_count = result.get("page_count")
-        parse_result.cover_file_id = cover_file_id
-        parse_result.raw_metadata = result.get("raw_metadata")
-        parse_result.error_message = None
-        parse_result.status = "done"
-        db.add(parse_result)
-        _mark_related_task_parsed(db, stored_file.object_key)
-        db.commit()
+        process_file_parse(db, file_id=file_id, parser_mode=parser_mode)
         channel.basic_ack(delivery_tag=method.delivery_tag)
     except Exception as exc:
+        stored_file = get_file(db, file_id)
         parse_result = get_file_parse_result(db, file_id)
+        if stored_file:
+            stored_file.parse_status = "done"
+            db.add(stored_file)
         if parse_result:
-            parse_result.status = "failed"
+            parse_result.status = "done"
             parse_result.error_message = str(exc)
             db.add(parse_result)
-        _mark_related_task_failed(db, file_id, str(exc))
         db.commit()
         channel.basic_ack(delivery_tag=method.delivery_tag)
     finally:
         db.close()
         release_lock(lock_key, lock_value)
+
+
+def process_file_parse(db, *, file_id: int, parser_mode: str) -> None:
+    stored_file = get_file(db, file_id)
+    if not stored_file:
+        return
+
+    parse_result = get_or_create_file_parse_result(db, file_id, parser_mode=parser_mode)
+    if parse_result.status == "done":
+        return
+
+    stored_file.parse_status = "processing"
+    db.add(stored_file)
+    parse_result.status = "processing"
+    db.add(parse_result)
+    db.commit()
+
+    error_message = None
+    try:
+        result = parse_file_metadata(stored_file, mode=parser_mode)
+    except Exception as exc:
+        error_message = str(exc)
+        result = {}
+
+    cover_file_id = _maybe_store_cover(db, stored_file, result)
+    parse_result.title = result.get("title")
+    parse_result.author = result.get("author")
+    parse_result.language = result.get("language")
+    parse_result.page_count = result.get("page_count")
+    parse_result.cover_file_id = cover_file_id
+    parse_result.raw_metadata = result.get("raw_metadata")
+    parse_result.error_message = error_message
+    parse_result.status = "done"
+    stored_file.parse_status = "done"
+    db.add(stored_file)
+    db.add(parse_result)
+    db.commit()
 
 
 def _maybe_store_cover(db, stored_file: StoredFile, parse_result: dict) -> int | None:
@@ -96,26 +109,17 @@ def _maybe_store_cover(db, stored_file: StoredFile, parse_result: dict) -> int |
         content_type=parse_result.get("cover_content_type") or "image/png",
         kind="cover",
     )
-    cover = create_file_record(db, user_id=stored_file.user_id, **payload)
+    cover = create_file_record(
+        db,
+        user_id=stored_file.user_id,
+        upload_status="uploaded",
+        parse_status="done",
+        bind_status="unbound",
+        **payload,
+    )
     db.flush()
+    add_unbound_cover_id(stored_file.user_id, cover.id)
     return cover.id
-
-
-def _mark_related_task_parsed(db, object_key: str) -> None:
-    task = get_upload_task_by_object_key(db, object_key)
-    if not task:
-        return
-    mark_upload_task_status(db, task, status="parsed", file_id=task.file_id)
-
-
-def _mark_related_task_failed(db, file_id: int, error_message: str) -> None:
-    stored_file = get_file(db, file_id)
-    if not stored_file:
-        return
-    task = get_upload_task_by_object_key(db, stored_file.object_key)
-    if not task:
-        return
-    mark_upload_task_status(db, task, status="failed", file_id=task.file_id, error_message=error_message)
 
 
 if __name__ == "__main__":
