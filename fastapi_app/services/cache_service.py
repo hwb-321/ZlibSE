@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from urllib.parse import quote_plus
 
 from ..core.config import get_settings
@@ -8,7 +9,6 @@ from ..core.redis import get_async_redis_client, get_redis_client
 from ..models import StoredFile, User
 from .local_cache_service import local_cache
 from .metrics_service import record_timing_metric
-import time
 
 def _get_client():
     return get_redis_client()
@@ -24,9 +24,23 @@ def _key(*parts: object) -> str:
     return f"{prefix}:{suffix}"
 
 
+def use_versioned_cache() -> bool:
+    return get_settings().cache_strategy.mode != "direct"
+
+
 def get_json(*parts: object):
     client = _get_client()
     if client is None:
+        return None
+    try:
+        value = client.get(_key(*parts))
+    except Exception:
+        return None
+    if not value:
+        return None
+    try:
+        return json.loads(value)
+    except json.JSONDecodeError:
         return None
 
 
@@ -36,16 +50,6 @@ async def async_get_json(*parts: object):
         return None
     try:
         value = await client.get(_key(*parts))
-    except Exception:
-        return None
-    if not value:
-        return None
-    try:
-        return json.loads(value)
-    except json.JSONDecodeError:
-        return None
-    try:
-        value = client.get(_key(*parts))
     except Exception:
         return None
     if not value:
@@ -99,6 +103,8 @@ async def async_delete_key(*parts: object) -> None:
 
 
 def get_book_cache_version() -> int:
+    if not use_versioned_cache():
+        return 1
     start = time.perf_counter()
     client = _get_client()
     if client is None:
@@ -120,6 +126,8 @@ def get_book_cache_version() -> int:
 
 
 def bump_book_cache_version() -> int:
+    if not use_versioned_cache():
+        return 1
     client = _get_client()
     if client is None:
         return 1
@@ -131,16 +139,29 @@ def bump_book_cache_version() -> int:
 
 
 def build_book_list_cache_key(page: int, page_size: int) -> tuple[object, ...]:
+    if not use_versioned_cache():
+        return ("books", "list", f"page={page}", f"size={page_size}")
     version = get_book_cache_version()
     return ("books", "list", f"v{version}", f"page={page}", f"size={page_size}")
 
 
+def build_book_list_cursor_cache_key(last_id: int, page_size: int) -> tuple[object, ...]:
+    if not use_versioned_cache():
+        return ("books", "list", f"cursor={last_id}", f"size={page_size}")
+    version = get_book_cache_version()
+    return ("books", "list", f"v{version}", f"cursor={last_id}", f"size={page_size}")
+
+
 def build_book_search_cache_key(query: str, page: int, page_size: int) -> tuple[object, ...]:
+    if not use_versioned_cache():
+        return ("books", "search", f"q={quote_plus(query)}", f"page={page}", f"size={page_size}")
     version = get_book_cache_version()
     return ("books", "search", f"v{version}", f"q={quote_plus(query)}", f"page={page}", f"size={page_size}")
 
 
 def get_book_detail_cache_version(book_id: int) -> int:
+    if not use_versioned_cache():
+        return 1
     client = _get_client()
     if client is None:
         return 1
@@ -156,6 +177,8 @@ def get_book_detail_cache_version(book_id: int) -> int:
 
 
 def bump_book_detail_cache_version(book_id: int) -> int:
+    if not use_versioned_cache():
+        return 1
     client = _get_client()
     if client is None:
         return 1
@@ -167,11 +190,15 @@ def bump_book_detail_cache_version(book_id: int) -> int:
 
 
 def build_book_detail_cache_key(book_id: int) -> tuple[object, ...]:
+    if not use_versioned_cache():
+        return ("book", book_id, "detail")
     version = get_book_detail_cache_version(book_id)
     return ("book", book_id, "detail", f"v{version}")
 
 
 def build_book_count_cache_key() -> tuple[object, ...]:
+    if not use_versioned_cache():
+        return ("books", "count")
     version = get_book_cache_version()
     return ("books", "count", f"v{version}")
 
@@ -276,6 +303,10 @@ def build_download_url_cache_key(file_id: int) -> tuple[object, ...]:
     return ("files", "download_url", file_id)
 
 
+def _download_hot_window_key(file_id: int) -> tuple[object, ...]:
+    return ("files", "download_hot_window", file_id)
+
+
 def serialize_file_meta(stored_file: StoredFile) -> dict:
     return {
         "id": stored_file.id,
@@ -321,6 +352,40 @@ def set_cached_download_url_payload(file_id: int, payload: dict) -> None:
 async def async_set_cached_download_url_payload(file_id: int, payload: dict) -> None:
     ttl = get_settings().download_cache.hot_signed_url_ttl_seconds
     await async_set_json(*build_download_url_cache_key(file_id), value=payload, ttl_seconds=ttl)
+
+
+def track_download_hot_access(file_id: int) -> int:
+    client = _get_client()
+    if client is None:
+        return 0
+    key = _key(*_download_hot_window_key(file_id))
+    window_seconds = get_settings().download_cache.hot_window_seconds
+    now = time.time()
+    member = str(time.time_ns())
+    try:
+        client.zadd(key, {member: now})
+        client.zremrangebyscore(key, 0, now - window_seconds)
+        client.expire(key, window_seconds + 5)
+        return int(client.zcard(key))
+    except Exception:
+        return 0
+
+
+async def async_track_download_hot_access(file_id: int) -> int:
+    client = _get_async_client()
+    if client is None:
+        return 0
+    key = _key(*_download_hot_window_key(file_id))
+    window_seconds = get_settings().download_cache.hot_window_seconds
+    now = time.time()
+    member = str(time.time_ns())
+    try:
+        await client.zadd(key, {member: now})
+        await client.zremrangebyscore(key, 0, now - window_seconds)
+        await client.expire(key, window_seconds + 5)
+        return int(await client.zcard(key))
+    except Exception:
+        return 0
 
 
 def _cover_set_key(user_id: int) -> tuple[object, ...]:
@@ -372,6 +437,8 @@ def _local_favorite_ids_key(user_id: int) -> str:
 
 
 def get_favorite_cache_version(user_id: int) -> int | None:
+    if not use_versioned_cache():
+        return 1
     client = _get_client()
     if client is None:
         return None
@@ -386,6 +453,8 @@ def get_favorite_cache_version(user_id: int) -> int | None:
 
 
 def bump_favorite_cache_version(user_id: int) -> int | None:
+    if not use_versioned_cache():
+        return 1
     client = _get_client()
     if client is None:
         return None
@@ -438,7 +507,7 @@ def set_cached_favorite_ids_payload(payload: dict) -> None:
 
 
 def get_cached_favorite_status(user_id: int, book_id: int) -> bool | None:
-    version = get_favorite_cache_version(user_id)
+    version = get_favorite_cache_version(user_id) if use_versioned_cache() else 1
     if version is None:
         return None
 
@@ -454,10 +523,13 @@ def get_cached_favorite_status(user_id: int, book_id: int) -> bool | None:
 
 
 def refresh_cached_favorite_ids(user_id: int, book_ids: list[int], *, bump_version: bool) -> None:
-    if bump_version:
-        version = bump_favorite_cache_version(user_id)
+    if use_versioned_cache():
+        if bump_version:
+            version = bump_favorite_cache_version(user_id)
+        else:
+            version = get_favorite_cache_version(user_id)
     else:
-        version = get_favorite_cache_version(user_id)
+        version = 1
     if version is None:
         return
 

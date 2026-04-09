@@ -148,12 +148,21 @@ debug_metrics:
   # 慢 SQL 阈值，单位毫秒。超过该阈值的 SQL 会额外累计 slow_sql 计数。
   slow_sql_threshold_ms: 100
 
+# 缓存策略。auth token version 始终保留版号机制，不受这里影响。
+cache_strategy:
+  # versioned=版号+内容缓存；direct=直接缓存内容，主要依赖 TTL 过期失效。
+  mode: versioned
+
 # 下载签发缓存配置。
 download_cache:
-  # 是否开启热点下载签发 URL 的 Redis 短缓存。
+  # 是否开启基于滑动窗口热点识别的下载签发 URL Redis 短缓存。
   hot_enabled: false
   # 热点下载签发 URL 的 Redis TTL，单位秒。压测前先预热 file_id 时，可以适当设置长一点。
   hot_signed_url_ttl_seconds: 30
+  # 热点访问统计窗口，单位秒。
+  hot_window_seconds: 30
+  # 窗口内达到该访问次数后，才会为对应 file_id 启用下载链接缓存。
+  hot_threshold: 5
 
 # 跨域配置。
 cors:

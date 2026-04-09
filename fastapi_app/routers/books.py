@@ -24,10 +24,10 @@ from ..services.book_service import (
 from ..services.cache_service import (
     build_book_count_cache_key,
     build_book_detail_cache_key,
+    build_book_list_cursor_cache_key,
     build_book_list_cache_key,
     bump_book_cache_version,
     delete_cached_public_file_meta,
-    get_book_cache_version,
 )
 from ..services.bloom_service import mark_book_exists, may_have_book, should_trust_book_bloom
 from ..services.hybrid_cache_service import EMPTY_MARKER, get_cached, set_cached, set_empty
@@ -132,8 +132,7 @@ def list_books_page(
         raise HTTPException(status_code=400, detail="Invalid page params")
 
     if lastId is not None:
-        version = get_book_cache_version()
-        cache_key = ("books", "list", f"v{version}", f"cursor={lastId}", f"size={effective_page_size}")
+        cache_key = build_book_list_cursor_cache_key(lastId, effective_page_size)
     else:
         cache_key = build_book_list_cache_key(page, effective_page_size)
     cache_start = time.perf_counter()

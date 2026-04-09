@@ -28,6 +28,7 @@ from ..services.cache_service import (
     add_unbound_cover_id,
     async_get_cached_download_url_payload,
     async_set_cached_download_url_payload,
+    async_track_download_hot_access,
     build_file_meta_cache_key,
     delete_cached_public_file_meta,
     get_cached_download_url_payload,
@@ -603,7 +604,15 @@ async def get_download_url(
         return response
     await async_record_timing_metric("download.route.mode_branch_ms", (time.perf_counter() - mode_branch_start) * 1000.0)
 
+    download_is_hot = False
+    download_hot_armed = False
     if settings.download_cache.hot_enabled:
+        hot_window_count = await async_track_download_hot_access(file_id)
+        download_is_hot = hot_window_count >= settings.download_cache.hot_threshold
+        download_hot_armed = hot_window_count > settings.download_cache.hot_threshold
+        await async_increment_counter("download.hot_window.hot" if download_is_hot else "download.hot_window.cold")
+
+    if download_hot_armed:
         hot_lookup_start = time.perf_counter()
         cached_download = await async_get_cached_download_url_payload(file_id)
         hot_lookup_elapsed_ms = (time.perf_counter() - hot_lookup_start) * 1000.0
@@ -637,7 +646,7 @@ async def get_download_url(
         "expiresIn": settings.storage.download_expires,
         "filename": public_payload["original_filename"],
     }
-    if settings.download_cache.hot_enabled:
+    if download_is_hot:
         hot_store_start = time.perf_counter()
         await async_set_cached_download_url_payload(file_id, response_payload)
         hot_store_elapsed_ms = (time.perf_counter() - hot_store_start) * 1000.0
