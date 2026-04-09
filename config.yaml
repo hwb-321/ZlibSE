@@ -39,7 +39,7 @@ database:
 # 压测辅助配置。
 benchmark:
   # 是否开启服务端压测 mock。开启后跳过真实上传、真实解析，直接写入默认元数据。
-  mock_upload_enabled: true
+  mock_upload_enabled: false
   # server-mock 下统一返回的固定对象 key，例如存储桶根路径下的 mock.txt。
   mock_file_object_key: mock.txt
   # server-mock 下写入 file_parse_results 的默认作者。
@@ -139,6 +139,21 @@ pagination:
   default_page_size: 10
   # 收藏列表、上传列表、书籍列表等分页接口允许的最大每页返回条数。
   max_page_size: 20
+
+# 调试指标配置。开启后会把请求统计、缓存命中统计、关键分段耗时写入 Redis，
+# 并可通过 /debug/metrics 聚合查看。
+debug_metrics:
+  # 是否开启 Redis 聚合调试指标。
+  enabled: true
+  # 慢 SQL 阈值，单位毫秒。超过该阈值的 SQL 会额外累计 slow_sql 计数。
+  slow_sql_threshold_ms: 100
+
+# 下载签发缓存配置。
+download_cache:
+  # 是否开启热点下载签发 URL 的 Redis 短缓存。
+  hot_enabled: false
+  # 热点下载签发 URL 的 Redis TTL，单位秒。压测前先预热 file_id 时，可以适当设置长一点。
+  hot_signed_url_ttl_seconds: 30
 
 # 跨域配置。
 cors:

@@ -120,6 +120,18 @@ class PaginationConfig:
 
 
 @dataclass(frozen=True)
+class DebugMetricsConfig:
+    enabled: bool = True
+    slow_sql_threshold_ms: int = 100
+
+
+@dataclass(frozen=True)
+class DownloadCacheConfig:
+    hot_enabled: bool = True
+    hot_signed_url_ttl_seconds: int = 30
+
+
+@dataclass(frozen=True)
 class AppConfig:
     server: ServerConfig
     security: SecurityConfig
@@ -131,6 +143,8 @@ class AppConfig:
     local_cache: LocalCacheConfig
     search: SearchConfig
     pagination: PaginationConfig
+    debug_metrics: DebugMetricsConfig
+    download_cache: DownloadCacheConfig
     cors_allow_origins: list[str]
 
 
@@ -167,6 +181,8 @@ def get_settings() -> AppConfig:
     local_cache_raw = raw.get("local_cache") or {}
     search_raw = raw.get("search") or {}
     pagination_raw = raw.get("pagination") or {}
+    debug_metrics_raw = raw.get("debug_metrics") or {}
+    download_cache_raw = raw.get("download_cache") or {}
     cors_raw = raw.get("cors") or {}
 
     server = ServerConfig(
@@ -272,6 +288,14 @@ def get_settings() -> AppConfig:
         default_page_size=max(1, int(pagination_raw.get("default_page_size", 10))),
         max_page_size=max(1, int(pagination_raw.get("max_page_size", 20))),
     )
+    debug_metrics = DebugMetricsConfig(
+        enabled=bool(debug_metrics_raw.get("enabled", True)),
+        slow_sql_threshold_ms=max(1, int(debug_metrics_raw.get("slow_sql_threshold_ms", 100))),
+    )
+    download_cache = DownloadCacheConfig(
+        hot_enabled=bool(download_cache_raw.get("hot_enabled", True)),
+        hot_signed_url_ttl_seconds=max(1, int(download_cache_raw.get("hot_signed_url_ttl_seconds", 30))),
+    )
 
     cors_allow_origins = _as_str_list(
         cors_raw.get("allow_origins"),
@@ -293,5 +317,7 @@ def get_settings() -> AppConfig:
         local_cache=local_cache,
         search=search,
         pagination=pagination,
+        debug_metrics=debug_metrics,
+        download_cache=download_cache,
         cors_allow_origins=cors_allow_origins,
     )

@@ -1,21 +1,26 @@
 from __future__ import annotations
 
+import time
 import mimetypes
 import uuid
+from functools import lru_cache
 from datetime import datetime
 from io import BytesIO
 from pathlib import Path
 
 from ..core.config import get_settings
 from ..models import StoredFile
+from .metrics_service import record_timing_metric
 
 
-def _get_client():
+@lru_cache(maxsize=1)
+def _build_client():
     import boto3
     from botocore.config import Config
 
     settings = get_settings().storage
-    return boto3.client(
+    build_start = time.perf_counter()
+    client = boto3.client(
         "s3",
         region_name=settings.region,
         endpoint_url=settings.endpoint,
@@ -26,6 +31,16 @@ def _get_client():
             s3={"addressing_style": "virtual"},
         ),
     )
+    record_timing_metric("download.client_build_ms", (time.perf_counter() - build_start) * 1000.0)
+    return client
+
+
+def _get_client():
+    return _build_client()
+
+
+def prewarm_storage_client() -> None:
+    _get_client()
 
 
 def _guess_content_type(filename: str, fallback: str = "application/octet-stream") -> str:
@@ -137,7 +152,8 @@ def create_presigned_download_url(stored_file: StoredFile) -> str:
 def create_presigned_object_url_for_object_key(bucket: str, object_key: str, *, expires_in: int | None = None) -> str:
     settings = get_settings().storage
     client = _get_client()
-    return client.generate_presigned_url(
+    generate_start = time.perf_counter()
+    url = client.generate_presigned_url(
         "get_object",
         Params={
             "Bucket": bucket,
@@ -145,6 +161,8 @@ def create_presigned_object_url_for_object_key(bucket: str, object_key: str, *, 
         },
         ExpiresIn=expires_in or settings.download_expires,
     )
+    record_timing_metric("download.generate_url_ms", (time.perf_counter() - generate_start) * 1000.0)
+    return url
 
 
 def delete_object(stored_file: StoredFile) -> None:

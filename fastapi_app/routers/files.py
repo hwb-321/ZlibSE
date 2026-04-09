@@ -25,11 +25,15 @@ from ..repositories.parse_result_repository import (
 from ..services.cache_service import (
     add_unbound_cover_id,
     build_file_meta_cache_key,
+    delete_cached_public_file_meta,
+    get_cached_download_url_payload,
     get_unbound_cover_ids_count,
+    set_cached_download_url_payload,
     serialize_file_meta,
 )
-from ..services.hybrid_cache_service import EMPTY_MARKER, delete_cached, get_cached, set_cached, set_empty
+from ..services.hybrid_cache_service import EMPTY_MARKER, get_cached, set_cached, set_empty
 from ..services.lock_service import acquire_lock, build_lock_value, release_lock
+from ..services.metrics_service import increment_counter, record_timing_metric
 from ..services.queue_service import publish_parse_task
 from ..services.parse_service import build_server_mock_parse_result
 from ..services.storage_service import (
@@ -343,7 +347,7 @@ def upload_complete(
             db.add(stored_file)
             db.add(parse_result)
             db.commit()
-            delete_cached(build_file_meta_cache_key(stored_file.id))
+            delete_cached_public_file_meta(stored_file.id)
             db.refresh(stored_file)
             return {
                 **_file_payload(stored_file),
@@ -390,7 +394,7 @@ def upload_complete(
                 db.add(stored_file)
                 db.commit()
 
-        delete_cached(build_file_meta_cache_key(stored_file.id))
+        delete_cached_public_file_meta(stored_file.id)
         db.refresh(stored_file)
         return {
             **_file_payload(stored_file),
@@ -409,15 +413,21 @@ def get_download_url(
 ):
     public_payload: dict | None = None
     stored_file = None
+    public_meta_start = time.perf_counter()
     try:
         public_payload = _load_public_file_meta(db, file_id)
         stored_file = SimpleNamespace(**public_payload)
+        increment_counter("download.access_mode.public")
     except HTTPException as exc:
         if exc.status_code != 404:
             raise
+    finally:
+        record_timing_metric("download.public_meta_ms", (time.perf_counter() - public_meta_start) * 1000.0)
 
     if stored_file is None:
+        owned_lookup_start = time.perf_counter()
         owned_file = get_file(db, file_id)
+        record_timing_metric("download.owned_lookup_ms", (time.perf_counter() - owned_lookup_start) * 1000.0)
         if not owned_file:
             raise HTTPException(status_code=404, detail="File not found")
         if current_user is None:
@@ -427,19 +437,41 @@ def get_download_url(
             raise HTTPException(status_code=403, detail="File is not available for direct access")
         stored_file = owned_file
         public_payload = serialize_file_meta(owned_file)
+        increment_counter("download.access_mode.owned_unbound")
 
     if get_settings().benchmark.mock_upload_enabled:
+        increment_counter("download.mode.mock")
         return {
             "downloadUrl": _build_server_mock_object_url(),
             "expiresIn": get_settings().storage.download_expires,
             "filename": public_payload["original_filename"],
         }
 
-    return {
-        "downloadUrl": create_presigned_download_url(stored_file),
-        "expiresIn": get_settings().storage.download_expires,
+    settings = get_settings()
+    if settings.download_cache.hot_enabled:
+        cached_download = get_cached_download_url_payload(file_id)
+        if cached_download and cached_download.get("filename") == public_payload["original_filename"]:
+            increment_counter("download.hot_url_cache.hit")
+            return {
+                "downloadUrl": cached_download["downloadUrl"],
+                "expiresIn": int(cached_download.get("expiresIn", settings.storage.download_expires)),
+                "filename": cached_download["filename"],
+            }
+        increment_counter("download.hot_url_cache.miss")
+
+    presign_start = time.perf_counter()
+    download_url = create_presigned_download_url(stored_file)
+    record_timing_metric("download.presign_ms", (time.perf_counter() - presign_start) * 1000.0)
+    increment_counter("download.mode.real")
+    response_payload = {
+        "downloadUrl": download_url,
+        "expiresIn": settings.storage.download_expires,
         "filename": public_payload["original_filename"],
     }
+    if settings.download_cache.hot_enabled:
+        set_cached_download_url_payload(file_id, response_payload)
+        increment_counter("download.hot_url_cache.store")
+    return response_payload
 
 
 @router.get("/{file_id}/parse")

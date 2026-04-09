@@ -223,6 +223,10 @@ def build_file_meta_cache_key(file_id: int) -> tuple[object, ...]:
     return ("files", "meta", file_id)
 
 
+def build_download_url_cache_key(file_id: int) -> tuple[object, ...]:
+    return ("files", "download_url", file_id)
+
+
 def serialize_file_meta(stored_file: StoredFile) -> dict:
     return {
         "id": stored_file.id,
@@ -247,6 +251,17 @@ def delete_cached_public_file_meta(file_id: int | None) -> None:
         return
     local_cache.delete(":".join(str(part) for part in build_file_meta_cache_key(file_id)))
     delete_key(*build_file_meta_cache_key(file_id))
+    delete_key(*build_download_url_cache_key(file_id))
+
+
+def get_cached_download_url_payload(file_id: int) -> dict | None:
+    payload = get_json(*build_download_url_cache_key(file_id))
+    return payload if isinstance(payload, dict) else None
+
+
+def set_cached_download_url_payload(file_id: int, payload: dict) -> None:
+    ttl = get_settings().download_cache.hot_signed_url_ttl_seconds
+    set_json(*build_download_url_cache_key(file_id), value=payload, ttl_seconds=ttl)
 
 
 def _cover_set_key(user_id: int) -> tuple[object, ...]:

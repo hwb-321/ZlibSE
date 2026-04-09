@@ -5,6 +5,7 @@ import random
 from ..core.config import get_settings
 from .cache_service import delete_key, get_json, set_json
 from .local_cache_service import local_cache
+from .metrics_service import increment_counter
 
 
 EMPTY_MARKER = {"__empty__": True}
@@ -14,16 +15,34 @@ def _normalize_key(parts: tuple[object, ...]) -> str:
     return ":".join(str(part) for part in parts)
 
 
+def _cache_metric_family(parts: tuple[object, ...]) -> str:
+    if not parts:
+        return "unknown"
+    if parts[0] == "books" and len(parts) > 1 and parts[1] == "list":
+        return "books_list"
+    if parts[0] == "books" and len(parts) > 1 and parts[1] == "count":
+        return "books_count"
+    if parts[0] == "book" and len(parts) > 2 and parts[2] == "detail":
+        return "book_detail"
+    if parts[0] == "files" and len(parts) > 1 and parts[1] == "meta":
+        return "file_meta"
+    return str(parts[0])
+
+
 def get_cached(parts: tuple[object, ...], *, local_ttl_seconds: int):
     local_key = _normalize_key(parts)
+    family = _cache_metric_family(parts)
     cached = local_cache.get(local_key)
     if cached is not None:
+        increment_counter(f"cache.{family}.local_empty_hit" if cached == EMPTY_MARKER else f"cache.{family}.local_hit")
         return cached
 
     cached = get_json(*parts)
     if cached is not None:
+        increment_counter(f"cache.{family}.redis_empty_hit" if cached == EMPTY_MARKER else f"cache.{family}.redis_hit")
         local_cache.set(local_key, cached, local_ttl_seconds)
         return cached
+    increment_counter(f"cache.{family}.miss")
     return None
 
 
