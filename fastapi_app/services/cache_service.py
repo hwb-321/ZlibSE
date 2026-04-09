@@ -7,6 +7,8 @@ from ..core.config import get_settings
 from ..core.redis import get_redis_client
 from ..models import StoredFile, User
 from .local_cache_service import local_cache
+from .metrics_service import record_timing_metric
+import time
 
 def _get_client():
     return get_redis_client()
@@ -56,17 +58,23 @@ def delete_key(*parts: object) -> None:
 
 
 def get_book_cache_version() -> int:
+    start = time.perf_counter()
     client = _get_client()
     if client is None:
+        record_timing_metric("books.version_read_ms", (time.perf_counter() - start) * 1000.0)
         return 1
     key = _key("books", "cache_version")
     try:
         value = client.get(key)
         if value is None:
             client.set(key, "1")
+            record_timing_metric("books.version_read_ms", (time.perf_counter() - start) * 1000.0)
             return 1
-        return max(1, int(value))
+        result = max(1, int(value))
+        record_timing_metric("books.version_read_ms", (time.perf_counter() - start) * 1000.0)
+        return result
     except Exception:
+        record_timing_metric("books.version_read_ms", (time.perf_counter() - start) * 1000.0)
         return 1
 
 

@@ -1,6 +1,6 @@
 import time
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -65,10 +65,14 @@ def create_app() -> FastAPI:
 
     @app.get("/debug/metrics", tags=["debug"])
     async def debug_metrics():
+        if not settings.debug_metrics.enabled:
+            raise HTTPException(status_code=404, detail="Debug metrics disabled")
         return JSONResponse(read_all_metrics())
 
     @app.delete("/debug/metrics", tags=["debug"])
     async def reset_debug_metrics():
+        if not settings.debug_metrics.enabled:
+            raise HTTPException(status_code=404, detail="Debug metrics disabled")
         reset_all_metrics()
         return {"success": True}
 
