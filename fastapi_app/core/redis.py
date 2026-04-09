@@ -14,3 +14,14 @@ def get_redis_client():
     import redis
 
     return redis.Redis.from_url(settings.redis.url, decode_responses=True)
+
+
+@lru_cache(maxsize=1)
+def get_async_redis_client():
+    settings = get_settings()
+    if not settings.redis.enabled:
+        return None
+
+    import redis.asyncio as redis_asyncio
+
+    return redis_asyncio.Redis.from_url(settings.redis.url, decode_responses=True)

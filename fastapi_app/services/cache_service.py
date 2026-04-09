@@ -4,7 +4,7 @@ import json
 from urllib.parse import quote_plus
 
 from ..core.config import get_settings
-from ..core.redis import get_redis_client
+from ..core.redis import get_async_redis_client, get_redis_client
 from ..models import StoredFile, User
 from .local_cache_service import local_cache
 from .metrics_service import record_timing_metric
@@ -12,6 +12,10 @@ import time
 
 def _get_client():
     return get_redis_client()
+
+
+def _get_async_client():
+    return get_async_redis_client()
 
 
 def _key(*parts: object) -> str:
@@ -23,6 +27,22 @@ def _key(*parts: object) -> str:
 def get_json(*parts: object):
     client = _get_client()
     if client is None:
+        return None
+
+
+async def async_get_json(*parts: object):
+    client = _get_async_client()
+    if client is None:
+        return None
+    try:
+        value = await client.get(_key(*parts))
+    except Exception:
+        return None
+    if not value:
+        return None
+    try:
+        return json.loads(value)
+    except json.JSONDecodeError:
         return None
     try:
         value = client.get(_key(*parts))
@@ -47,12 +67,33 @@ def set_json(*parts: object, value, ttl_seconds: int | None = None) -> None:
         return
 
 
+async def async_set_json(*parts: object, value, ttl_seconds: int | None = None) -> None:
+    client = _get_async_client()
+    if client is None:
+        return
+    ttl = ttl_seconds or get_settings().redis.default_ttl_seconds
+    try:
+        await client.setex(_key(*parts), ttl, json.dumps(value, ensure_ascii=False, separators=(",", ":")))
+    except Exception:
+        return
+
+
 def delete_key(*parts: object) -> None:
     client = _get_client()
     if client is None:
         return
     try:
         client.delete(_key(*parts))
+    except Exception:
+        return
+
+
+async def async_delete_key(*parts: object) -> None:
+    client = _get_async_client()
+    if client is None:
+        return
+    try:
+        await client.delete(_key(*parts))
     except Exception:
         return
 
@@ -267,9 +308,19 @@ def get_cached_download_url_payload(file_id: int) -> dict | None:
     return payload if isinstance(payload, dict) else None
 
 
+async def async_get_cached_download_url_payload(file_id: int) -> dict | None:
+    payload = await async_get_json(*build_download_url_cache_key(file_id))
+    return payload if isinstance(payload, dict) else None
+
+
 def set_cached_download_url_payload(file_id: int, payload: dict) -> None:
     ttl = get_settings().download_cache.hot_signed_url_ttl_seconds
     set_json(*build_download_url_cache_key(file_id), value=payload, ttl_seconds=ttl)
+
+
+async def async_set_cached_download_url_payload(file_id: int, payload: dict) -> None:
+    ttl = get_settings().download_cache.hot_signed_url_ttl_seconds
+    await async_set_json(*build_download_url_cache_key(file_id), value=payload, ttl_seconds=ttl)
 
 
 def _cover_set_key(user_id: int) -> tuple[object, ...]:

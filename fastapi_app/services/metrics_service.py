@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from ..core.config import get_settings
-from ..core.redis import get_redis_client
+from ..core.redis import get_async_redis_client, get_redis_client
 
 
 def _get_client():
@@ -11,6 +11,13 @@ def _get_client():
     if not getattr(settings, "debug_metrics", None) or not settings.debug_metrics.enabled:
         return None
     return get_redis_client()
+
+
+def _get_async_client():
+    settings = get_settings()
+    if not getattr(settings, "debug_metrics", None) or not settings.debug_metrics.enabled:
+        return None
+    return get_async_redis_client()
 
 
 def _key(*parts: object) -> str:
@@ -63,6 +70,22 @@ def record_timing_metric(name: str, duration_ms: float) -> None:
         return
 
 
+async def async_record_timing_metric(name: str, duration_ms: float) -> None:
+    client = _get_async_client()
+    if client is None:
+        return
+    key = _metric_key("timing", _safe_name(name))
+    try:
+        pipeline = client.pipeline()
+        pipeline.hset(key, mapping={"name": name, "kind": "timing"})
+        pipeline.hincrby(key, "count", 1)
+        pipeline.hincrbyfloat(key, "total_ms", float(duration_ms))
+        pipeline.hset(key, "updated_at", datetime.utcnow().isoformat())
+        await pipeline.execute()
+    except Exception:
+        return
+
+
 def increment_counter(name: str, amount: int = 1) -> None:
     client = _get_client()
     if client is None:
@@ -74,6 +97,21 @@ def increment_counter(name: str, amount: int = 1) -> None:
         pipeline.hincrby(key, "count", int(amount))
         pipeline.hset(key, "updated_at", datetime.utcnow().isoformat())
         pipeline.execute()
+    except Exception:
+        return
+
+
+async def async_increment_counter(name: str, amount: int = 1) -> None:
+    client = _get_async_client()
+    if client is None:
+        return
+    key = _metric_key("counter", _safe_name(name))
+    try:
+        pipeline = client.pipeline()
+        pipeline.hset(key, mapping={"name": name, "kind": "counter"})
+        pipeline.hincrby(key, "count", int(amount))
+        pipeline.hset(key, "updated_at", datetime.utcnow().isoformat())
+        await pipeline.execute()
     except Exception:
         return
 
