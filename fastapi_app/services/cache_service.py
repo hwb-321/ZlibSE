@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import random
 import time
 from urllib.parse import quote_plus
 
@@ -8,7 +9,6 @@ from ..core.config import get_settings
 from ..core.redis import get_async_redis_client, get_redis_client
 from ..models import StoredFile, User
 from .local_cache_service import local_cache
-from .metrics_service import record_timing_metric
 
 def _get_client():
     return get_redis_client()
@@ -24,8 +24,8 @@ def _key(*parts: object) -> str:
     return f"{prefix}:{suffix}"
 
 
-def use_versioned_cache() -> bool:
-    return get_settings().cache_strategy.mode != "direct"
+def _with_ttl_jitter(ttl_seconds: int) -> int:
+    return max(1, ttl_seconds) + random.randint(5, 30)
 
 
 def get_json(*parts: object):
@@ -64,7 +64,7 @@ def set_json(*parts: object, value, ttl_seconds: int | None = None) -> None:
     client = _get_client()
     if client is None:
         return
-    ttl = ttl_seconds or get_settings().redis.default_ttl_seconds
+    ttl = _with_ttl_jitter(ttl_seconds or get_settings().redis.default_ttl_seconds)
     try:
         client.setex(_key(*parts), ttl, json.dumps(value, ensure_ascii=False, separators=(",", ":")))
     except Exception:
@@ -75,7 +75,7 @@ async def async_set_json(*parts: object, value, ttl_seconds: int | None = None) 
     client = _get_async_client()
     if client is None:
         return
-    ttl = ttl_seconds or get_settings().redis.default_ttl_seconds
+    ttl = _with_ttl_jitter(ttl_seconds or get_settings().redis.default_ttl_seconds)
     try:
         await client.setex(_key(*parts), ttl, json.dumps(value, ensure_ascii=False, separators=(",", ":")))
     except Exception:
@@ -102,105 +102,56 @@ async def async_delete_key(*parts: object) -> None:
         return
 
 
-def get_book_cache_version() -> int:
-    if not use_versioned_cache():
-        return 1
-    start = time.perf_counter()
+def delete_key_pattern(*parts: object) -> None:
     client = _get_client()
     if client is None:
-        record_timing_metric("books.version_read_ms", (time.perf_counter() - start) * 1000.0)
-        return 1
-    key = _key("books", "cache_version")
+        return
+    pattern = _key(*parts)
     try:
-        value = client.get(key)
-        if value is None:
-            client.set(key, "1")
-            record_timing_metric("books.version_read_ms", (time.perf_counter() - start) * 1000.0)
-            return 1
-        result = max(1, int(value))
-        record_timing_metric("books.version_read_ms", (time.perf_counter() - start) * 1000.0)
-        return result
+        cursor = 0
+        while True:
+            cursor, keys = client.scan(cursor=cursor, match=pattern, count=100)
+            if keys:
+                client.delete(*keys)
+            if cursor == 0:
+                break
     except Exception:
-        record_timing_metric("books.version_read_ms", (time.perf_counter() - start) * 1000.0)
-        return 1
-
-
-def bump_book_cache_version() -> int:
-    if not use_versioned_cache():
-        return 1
-    client = _get_client()
-    if client is None:
-        return 1
-    key = _key("books", "cache_version")
-    try:
-        return int(client.incr(key))
-    except Exception:
-        return 1
+        return
 
 
 def build_book_list_cache_key(page: int, page_size: int) -> tuple[object, ...]:
-    if not use_versioned_cache():
-        return ("books", "list", f"page={page}", f"size={page_size}")
-    version = get_book_cache_version()
-    return ("books", "list", f"v{version}", f"page={page}", f"size={page_size}")
+    return ("books", "list", f"page={page}", f"size={page_size}")
 
 
 def build_book_list_cursor_cache_key(last_id: int, page_size: int) -> tuple[object, ...]:
-    if not use_versioned_cache():
-        return ("books", "list", f"cursor={last_id}", f"size={page_size}")
-    version = get_book_cache_version()
-    return ("books", "list", f"v{version}", f"cursor={last_id}", f"size={page_size}")
+    return ("books", "list", f"cursor={last_id}", f"size={page_size}")
 
 
 def build_book_search_cache_key(query: str, page: int, page_size: int) -> tuple[object, ...]:
-    if not use_versioned_cache():
-        return ("books", "search", f"q={quote_plus(query)}", f"page={page}", f"size={page_size}")
-    version = get_book_cache_version()
-    return ("books", "search", f"v{version}", f"q={quote_plus(query)}", f"page={page}", f"size={page_size}")
-
-
-def get_book_detail_cache_version(book_id: int) -> int:
-    if not use_versioned_cache():
-        return 1
-    client = _get_client()
-    if client is None:
-        return 1
-    key = _key("book", book_id, "detail_cache_version")
-    try:
-        value = client.get(key)
-        if value is None:
-            client.set(key, "1")
-            return 1
-        return max(1, int(value))
-    except Exception:
-        return 1
-
-
-def bump_book_detail_cache_version(book_id: int) -> int:
-    if not use_versioned_cache():
-        return 1
-    client = _get_client()
-    if client is None:
-        return 1
-    key = _key("book", book_id, "detail_cache_version")
-    try:
-        return int(client.incr(key))
-    except Exception:
-        return 1
+    return ("books", "search", f"q={quote_plus(query)}", f"page={page}", f"size={page_size}")
 
 
 def build_book_detail_cache_key(book_id: int) -> tuple[object, ...]:
-    if not use_versioned_cache():
-        return ("book", book_id, "detail")
-    version = get_book_detail_cache_version(book_id)
-    return ("book", book_id, "detail", f"v{version}")
+    return ("book", book_id, "detail")
 
 
 def build_book_count_cache_key() -> tuple[object, ...]:
-    if not use_versioned_cache():
-        return ("books", "count")
-    version = get_book_cache_version()
-    return ("books", "count", f"v{version}")
+    return ("books", "count")
+
+
+def delete_cached_book_collection() -> None:
+    local_cache.delete(":".join(str(part) for part in build_book_count_cache_key()))
+    local_cache.delete_prefix("books:list:")
+    local_cache.delete_prefix("books:search:")
+    delete_key(*build_book_count_cache_key())
+    delete_key_pattern("books", "list", "*")
+    delete_key_pattern("books", "search", "*")
+
+
+def delete_cached_book_detail(book_id: int) -> None:
+    parts = build_book_detail_cache_key(book_id)
+    local_cache.delete(":".join(str(part) for part in parts))
+    delete_key(*parts)
 
 
 def _user_auth_token_version_key(user_id: int) -> tuple[object, ...]:
@@ -227,7 +178,7 @@ def get_cached_auth_token_version(user_id: int) -> int | None:
 
 
 def set_cached_auth_token_version(user_id: int, auth_token_version: int) -> None:
-    ttl = get_settings().redis.auth_token_version_ttl_seconds
+    ttl = _with_ttl_jitter(get_settings().redis.auth_token_version_ttl_seconds)
     client = _get_client()
     if client is None:
         return
@@ -277,17 +228,10 @@ def set_cached_user_profile(user: User) -> None:
         "username": user.username,
         "email": user.email,
         "is_superuser": user.is_superuser,
-        "auth_token_version": user.auth_token_version,
     }
-    set_local_cached_user_profile_payload(payload)
-    client = _get_client()
-    if client is None:
-        return
     ttl = get_settings().redis.user_profile_ttl_seconds
-    try:
-        client.setex(_key(*_user_profile_key(user.id)), ttl, json.dumps(payload, ensure_ascii=False))
-    except Exception:
-        return
+    set_json(*_user_profile_key(user.id), value=payload, ttl_seconds=ttl)
+    set_local_cached_user_profile_payload(payload)
 
 
 def delete_cached_user_profile(user_id: int) -> None:
@@ -305,6 +249,15 @@ def build_download_url_cache_key(file_id: int) -> tuple[object, ...]:
 
 def _download_hot_window_key(file_id: int) -> tuple[object, ...]:
     return ("files", "download_hot_window", file_id)
+
+
+def _local_download_url_key(file_id: int) -> str:
+    return ":".join(str(part) for part in build_download_url_cache_key(file_id))
+
+
+def _download_url_local_ttl_seconds() -> int:
+    settings = get_settings()
+    return max(1, min(10, settings.download_cache.hot_signed_url_ttl_seconds))
 
 
 def serialize_file_meta(stored_file: StoredFile) -> dict:
@@ -330,8 +283,18 @@ def delete_cached_public_file_meta(file_id: int | None) -> None:
     if file_id is None:
         return
     local_cache.delete(":".join(str(part) for part in build_file_meta_cache_key(file_id)))
+    local_cache.delete(_local_download_url_key(file_id))
     delete_key(*build_file_meta_cache_key(file_id))
     delete_key(*build_download_url_cache_key(file_id))
+
+
+def get_local_cached_download_url_payload(file_id: int) -> dict | None:
+    cached = local_cache.get(_local_download_url_key(file_id))
+    return cached if isinstance(cached, dict) else None
+
+
+def set_local_cached_download_url_payload(file_id: int, payload: dict) -> None:
+    local_cache.set(_local_download_url_key(file_id), payload, _download_url_local_ttl_seconds())
 
 
 def get_cached_download_url_payload(file_id: int) -> dict | None:
@@ -347,11 +310,13 @@ async def async_get_cached_download_url_payload(file_id: int) -> dict | None:
 def set_cached_download_url_payload(file_id: int, payload: dict) -> None:
     ttl = get_settings().download_cache.hot_signed_url_ttl_seconds
     set_json(*build_download_url_cache_key(file_id), value=payload, ttl_seconds=ttl)
+    set_local_cached_download_url_payload(file_id, payload)
 
 
 async def async_set_cached_download_url_payload(file_id: int, payload: dict) -> None:
     ttl = get_settings().download_cache.hot_signed_url_ttl_seconds
     await async_set_json(*build_download_url_cache_key(file_id), value=payload, ttl_seconds=ttl)
+    set_local_cached_download_url_payload(file_id, payload)
 
 
 def track_download_hot_access(file_id: int) -> int:
@@ -424,44 +389,12 @@ def remove_unbound_cover_id(user_id: int | None, file_id: int | None) -> None:
         return
 
 
-def _favorite_version_key(user_id: int) -> tuple[object, ...]:
-    return ("user", user_id, "favorite_version")
-
-
 def _favorite_ids_key(user_id: int) -> tuple[object, ...]:
     return ("user", user_id, "favorite_ids")
 
 
 def _local_favorite_ids_key(user_id: int) -> str:
     return ":".join(str(part) for part in _favorite_ids_key(user_id))
-
-
-def get_favorite_cache_version(user_id: int) -> int | None:
-    if not use_versioned_cache():
-        return 1
-    client = _get_client()
-    if client is None:
-        return None
-    try:
-        value = client.get(_key(*_favorite_version_key(user_id)))
-        if value is None:
-            client.set(_key(*_favorite_version_key(user_id)), "1")
-            return 1
-        return max(1, int(value))
-    except Exception:
-        return None
-
-
-def bump_favorite_cache_version(user_id: int) -> int | None:
-    if not use_versioned_cache():
-        return 1
-    client = _get_client()
-    if client is None:
-        return None
-    try:
-        return int(client.incr(_key(*_favorite_version_key(user_id))))
-    except Exception:
-        return None
 
 
 def get_local_cached_favorite_ids_payload(user_id: int) -> dict | None:
@@ -495,47 +428,31 @@ def set_local_cached_favorite_ids_payload(payload: dict) -> None:
 
 
 def set_cached_favorite_ids_payload(payload: dict) -> None:
-    set_local_cached_favorite_ids_payload(payload)
-    client = _get_client()
-    if client is None:
-        return
     ttl = get_settings().redis.favorite_set_ttl_seconds
-    try:
-        client.setex(_key(*_favorite_ids_key(int(payload["user_id"]))), ttl, json.dumps(payload, ensure_ascii=False))
-    except Exception:
-        return
+    set_json(*_favorite_ids_key(int(payload["user_id"])), value=payload, ttl_seconds=ttl)
+    set_local_cached_favorite_ids_payload(payload)
 
 
 def get_cached_favorite_status(user_id: int, book_id: int) -> bool | None:
-    version = get_favorite_cache_version(user_id) if use_versioned_cache() else 1
-    if version is None:
-        return None
-
     local_payload = get_local_cached_favorite_ids_payload(user_id)
-    if local_payload and int(local_payload.get("version", -1)) == version:
+    if local_payload:
         return book_id in set(int(item) for item in local_payload.get("book_ids", []))
 
     cached_payload = get_cached_favorite_ids_payload(user_id)
-    if cached_payload and int(cached_payload.get("version", -1)) == version:
+    if cached_payload:
         set_local_cached_favorite_ids_payload(cached_payload)
         return book_id in set(int(item) for item in cached_payload.get("book_ids", []))
     return None
 
 
-def refresh_cached_favorite_ids(user_id: int, book_ids: list[int], *, bump_version: bool) -> None:
-    if use_versioned_cache():
-        if bump_version:
-            version = bump_favorite_cache_version(user_id)
-        else:
-            version = get_favorite_cache_version(user_id)
-    else:
-        version = 1
-    if version is None:
-        return
-
+def set_cached_favorite_ids(user_id: int, book_ids: list[int]) -> None:
     payload = {
         "user_id": user_id,
-        "version": version,
         "book_ids": book_ids,
     }
     set_cached_favorite_ids_payload(payload)
+
+
+def delete_cached_favorite_ids(user_id: int) -> None:
+    local_cache.delete(_local_favorite_ids_key(user_id))
+    delete_key(*_favorite_ids_key(user_id))

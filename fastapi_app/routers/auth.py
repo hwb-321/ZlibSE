@@ -116,6 +116,4 @@ def change_password(
     db.commit()
     delete_cached_auth_token_version(current_user.id)
     delete_cached_user_profile(current_user.id)
-    set_cached_auth_token_version(current_user.id, current_user.auth_token_version)
-    set_cached_user_profile(current_user)
     return {"success": True, "message": "?????"}

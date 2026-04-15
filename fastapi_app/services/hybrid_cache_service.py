@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import random
 import time
 
 from ..core.config import get_settings
@@ -89,15 +88,13 @@ async def async_get_cached(parts: tuple[object, ...], *, local_ttl_seconds: int)
 
 def set_cached(parts: tuple[object, ...], value, *, redis_ttl_seconds: int, local_ttl_seconds: int) -> None:
     local_key = _normalize_key(parts)
-    ttl = redis_ttl_seconds + random.randint(5, 30)
-    set_json(*parts, value=value, ttl_seconds=ttl)
+    set_json(*parts, value=value, ttl_seconds=redis_ttl_seconds)
     local_cache.set(local_key, value, local_ttl_seconds)
 
 
 async def async_set_cached(parts: tuple[object, ...], value, *, redis_ttl_seconds: int, local_ttl_seconds: int) -> None:
     local_key = _normalize_key(parts)
-    ttl = redis_ttl_seconds + random.randint(5, 30)
-    await async_set_json(*parts, value=value, ttl_seconds=ttl)
+    await async_set_json(*parts, value=value, ttl_seconds=redis_ttl_seconds)
     local_cache.set(local_key, value, local_ttl_seconds)
 
 

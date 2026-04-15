@@ -20,13 +20,12 @@ security:
   # Access token 过期天数。
   jwt_access_token_expire_days: 7
   # 是否启用登录/注册验证码。
-  captcha_enabled: false
+  captcha_enabled: true
 
 # 数据库配置。
 database:
-  # 数据库连接地址。当前已切到新的腾讯云实例，数据库名仍按 zlibse 访问；
-  # 但 Administrator 账号目前仅验证到“可登录实例”，尚未获得 zlibse 库权限，授权完成前后端连库会失败。
-  url: mysql+pymysql://Administrator:tU5W83S%5EL%3A%2FacN@bj-cynosdbmysql-grp-hrtwguje.sql.tencentcdb.com:22285/zlibse?charset=utf8mb4
+  # 公开模板默认使用本地 SQLite。部署或本地真实环境请改为 MySQL URL。
+  sqlite_path: zlibse.db
   # SQLAlchemy 连接池常驻连接数。
   pool_size: 2
   # 常驻连接不够时允许临时创建的额外连接数。
@@ -86,7 +85,7 @@ redis:
   book_detail_ttl_seconds: 300
   # auth_token_version 缓存 TTL。
   auth_token_version_ttl_seconds: 300
-  # 用户基础信息缓存 TTL。用于鉴权命中后直接复用用户 id、用户名、管理员标记和 auth_token_version。
+  # 用户基础信息缓存 TTL。用于鉴权版本校验通过后直接复用用户 id、用户名和管理员标记。
   user_profile_ttl_seconds: 300
   # 下载元信息缓存 TTL。
   file_meta_ttl_seconds: 300
@@ -108,7 +107,7 @@ local_cache:
   # 是否启用本地一级缓存。
   # 只有当 redis.enabled=true 且 local_cache.enabled=true 时，才会形成“一级缓存 + Redis + 数据库”三层模式。
   # 如果 redis.enabled=false，则这里即使为 true 也不会单独启用一级缓存，而是直接退回“只有数据库”。
-  enabled: false
+  enabled: true
   # 最大缓存条目数。
   max_entries: 1024
   # 默认 TTL。
@@ -127,7 +126,7 @@ search:
   # 搜索接口允许的最大每页返回条数。
   max_page_size: 20
   # 是否开启搜索限流保护。开启后会按客户端 IP 在时间窗口内限流，防止搜索请求把数据库打穿。
-  rate_limit_enabled: false
+  rate_limit_enabled: true
   # 搜索限流窗口大小，单位秒。
   rate_limit_window_seconds: 10
   # 搜索限流窗口内允许的最大请求次数。
@@ -148,15 +147,10 @@ debug_metrics:
   # 慢 SQL 阈值，单位毫秒。超过该阈值的 SQL 会额外累计 slow_sql 计数。
   slow_sql_threshold_ms: 100
 
-# 缓存策略。auth token version 始终保留版号机制，不受这里影响。
-cache_strategy:
-  # versioned=版号+内容缓存；direct=直接缓存内容，主要依赖 TTL 过期失效。
-  mode: versioned
-
 # 下载签发缓存配置。
 download_cache:
   # 是否开启基于滑动窗口热点识别的下载签发 URL Redis 短缓存。
-  hot_enabled: false
+  hot_enabled: true
   # 热点下载签发 URL 的 Redis TTL，单位秒。压测前先预热 file_id 时，可以适当设置长一点。
   hot_signed_url_ttl_seconds: 30
   # 热点访问统计窗口，单位秒。
@@ -182,10 +176,10 @@ storage:
   region: ap-beijing
   # COS 的 S3 兼容接入点。这里使用 region 级 endpoint，并通过 virtual-hosted-style 访问桶。
   endpoint: https://cos.ap-beijing.myqcloud.com
-  # 访问密钥 ID。
-  secret_id: AKIDru6CAADWM1oMrGVlJm8NSNCtSr7IQWUT
-  # 访问密钥 Key。
-  secret_key: qdIl2BAyhEajuBHE0cBi3BKYkIhw0w9D
+  # 访问密钥 ID。公开模板留空，真实环境请填写。
+  secret_id: ""
+  # 访问密钥 Key。公开模板留空，真实环境请填写。
+  secret_key: ""
   # 预签名上传链接有效期，单位秒。
   upload_expires: 900
   # 预签名下载链接有效期，单位秒。

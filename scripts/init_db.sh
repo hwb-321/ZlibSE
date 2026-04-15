@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CONFIG_FILE="${APP_CONFIG_FILE:-$ROOT_DIR/config.yaml}"
+CONFIG_FILE="${APP_CONFIG_FILE:-$ROOT_DIR/config.secret.yaml}"
 PYTHON_BIN="${ROOT_DIR}/.venv/bin/python"
 
 if [[ ! -f "$CONFIG_FILE" ]]; then

@@ -7,13 +7,12 @@ from ..core.database import get_db
 from ..core.deps import get_current_user
 from ..models import UploadedBook, User, UserCollectedBook
 from ..repositories.book_repository import get_book
-from ..repositories.favorite_repository import list_favorite_book_ids
 from ..repositories.upload_repository import get_upload_relation, list_uploaded_books
 from ..services.cache_service import (
-    bump_book_cache_version,
-    bump_book_detail_cache_version,
+    delete_cached_book_collection,
+    delete_cached_book_detail,
+    delete_cached_favorite_ids,
     delete_cached_public_file_meta,
-    refresh_cached_favorite_ids,
 )
 from ..services.book_service import book_to_summary, delete_book_files
 
@@ -63,10 +62,10 @@ def delete_uploaded_book_entry(
     delete_book_files(db, book)
     db.delete(book)
     db.commit()
-    bump_book_cache_version()
-    bump_book_detail_cache_version(book_id)
+    delete_cached_book_collection()
+    delete_cached_book_detail(book_id)
     delete_cached_public_file_meta(book_file_id)
     delete_cached_public_file_meta(cover_file_id)
     for favorite_user_id in favorite_user_ids:
-        refresh_cached_favorite_ids(favorite_user_id, list_favorite_book_ids(db, favorite_user_id), bump_version=True)
+        delete_cached_favorite_ids(favorite_user_id)
     return {"success": True, "message": "书籍及相关文件已删除"}

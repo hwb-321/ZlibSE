@@ -26,7 +26,7 @@ from ..services.cache_service import (
     build_book_detail_cache_key,
     build_book_list_cursor_cache_key,
     build_book_list_cache_key,
-    bump_book_cache_version,
+    delete_cached_book_collection,
     delete_cached_public_file_meta,
 )
 from ..services.bloom_service import mark_book_exists, may_have_book, should_trust_book_bloom
@@ -36,8 +36,8 @@ from ..services.metrics_service import record_timing_metric
 from ..services.rate_limit_service import is_allowed
 
 router = APIRouter(tags=["books"])
-DETAIL_REBUILD_WAIT_SECONDS = 0.05
-DETAIL_REBUILD_MAX_RETRIES = 3
+CACHE_REBUILD_WAIT_SECONDS = 0.05
+CACHE_REBUILD_MAX_RETRIES = 3
 
 
 class BookUpsertRequest(BaseModel):
@@ -49,6 +49,12 @@ class BookUpsertRequest(BaseModel):
     year: int | None = None
     language: str | None = None
     coverFileId: int | None = None
+
+
+def _cache_rebuild_lock_key(parts: tuple[object, ...]) -> str:
+    settings = get_settings()
+    normalized = ":".join(str(part) for part in parts)
+    return f"{settings.redis.prefix}:cache:rebuild:{normalized}"
 
 
 @router.post("/api/books")
@@ -79,7 +85,7 @@ def create_book(
     db.add(UploadedBook(user_id=current_user.id, book_id=book.id))
     db.commit()
     db.refresh(book)
-    bump_book_cache_version()
+    delete_cached_book_collection()
     mark_book_exists(book.id)
     delete_cached_public_file_meta(book.book_file_id)
     delete_cached_public_file_meta(book.cover_file_id)
@@ -101,13 +107,44 @@ def get_book_count(db: Session = Depends(get_db)):
         record_timing_metric("books_count.route_ms", (time.perf_counter() - route_start) * 1000.0)
         return response
 
-    result = {"count": count_books(db)}
-    set_cached(
-        cache_key,
-        result,
-        redis_ttl_seconds=settings.redis.book_list_ttl_seconds,
-        local_ttl_seconds=settings.local_cache.default_ttl_seconds,
-    )
+    lock_key = _cache_rebuild_lock_key(cache_key)
+    lock_value = build_lock_value()
+    if acquire_lock(lock_key, lock_value, ttl_seconds=settings.redis.lock_ttl_seconds):
+        try:
+            cached = get_cached(cache_key, local_ttl_seconds=settings.local_cache.default_ttl_seconds)
+            if cached is not None:
+                record_timing_metric("books_count.cache_path_ms", (time.perf_counter() - cache_start) * 1000.0)
+                build_start = time.perf_counter()
+                response = JSONResponse(cached)
+                record_timing_metric("books_count.response_build_ms", (time.perf_counter() - build_start) * 1000.0)
+                record_timing_metric("books_count.route_ms", (time.perf_counter() - route_start) * 1000.0)
+                return response
+
+            result = {"count": count_books(db)}
+            set_cached(
+                cache_key,
+                result,
+                redis_ttl_seconds=settings.redis.book_list_ttl_seconds,
+                local_ttl_seconds=settings.local_cache.default_ttl_seconds,
+            )
+        finally:
+            release_lock(lock_key, lock_value)
+    else:
+        result = None
+        for _ in range(CACHE_REBUILD_MAX_RETRIES):
+            time.sleep(CACHE_REBUILD_WAIT_SECONDS)
+            cached = get_cached(cache_key, local_ttl_seconds=settings.local_cache.default_ttl_seconds)
+            if cached is not None:
+                result = cached
+                break
+        if result is None:
+            result = {"count": count_books(db)}
+            set_cached(
+                cache_key,
+                result,
+                redis_ttl_seconds=settings.redis.book_list_ttl_seconds,
+                local_ttl_seconds=settings.local_cache.default_ttl_seconds,
+            )
     record_timing_metric("books_count.cache_path_ms", (time.perf_counter() - cache_start) * 1000.0)
     build_start = time.perf_counter()
     response = JSONResponse(result)
@@ -146,27 +183,73 @@ def list_books_page(
         record_timing_metric("books_list.response_bytes", len(response.body or b""))
         return response
 
-    if lastId is not None:
-        books = list_books_by_cursor(db, lastId, effective_page_size)
-    else:
-        books = list_books(db, page, effective_page_size)
-        if not books and page != 1:
-            return JSONResponse({"error": "页面不存在"}, status_code=404)
+    lock_key = _cache_rebuild_lock_key(cache_key)
+    lock_value = build_lock_value()
+    if acquire_lock(lock_key, lock_value, ttl_seconds=settings.redis.lock_ttl_seconds):
+        try:
+            cached = get_cached(cache_key, local_ttl_seconds=settings.local_cache.default_ttl_seconds)
+            if cached is not None:
+                record_timing_metric("books_list.cache_path_ms", (time.perf_counter() - cache_start) * 1000.0)
+                build_start = time.perf_counter()
+                response = JSONResponse(cached)
+                record_timing_metric("books_list.response_build_ms", (time.perf_counter() - build_start) * 1000.0)
+                record_timing_metric("books_list.route_ms", (time.perf_counter() - route_start) * 1000.0)
+                record_timing_metric("books_list.response_bytes", len(response.body or b""))
+                return response
 
-    next_last_id = books[-1].id if books else None
-    result = {
-        "page": page,
-        "pageSize": effective_page_size,
-        "lastId": lastId,
-        "nextLastId": next_last_id,
-        "books": [book_to_summary(book) for book in books],
-    }
-    set_cached(
-        cache_key,
-        result,
-        redis_ttl_seconds=settings.redis.book_list_ttl_seconds,
-        local_ttl_seconds=settings.local_cache.default_ttl_seconds,
-    )
+            if lastId is not None:
+                books = list_books_by_cursor(db, lastId, effective_page_size)
+            else:
+                books = list_books(db, page, effective_page_size)
+                if not books and page != 1:
+                    return JSONResponse({"error": "页面不存在"}, status_code=404)
+
+            next_last_id = books[-1].id if books else None
+            result = {
+                "page": page,
+                "pageSize": effective_page_size,
+                "lastId": lastId,
+                "nextLastId": next_last_id,
+                "books": [book_to_summary(book) for book in books],
+            }
+            set_cached(
+                cache_key,
+                result,
+                redis_ttl_seconds=settings.redis.book_list_ttl_seconds,
+                local_ttl_seconds=settings.local_cache.default_ttl_seconds,
+            )
+        finally:
+            release_lock(lock_key, lock_value)
+    else:
+        result = None
+        for _ in range(CACHE_REBUILD_MAX_RETRIES):
+            time.sleep(CACHE_REBUILD_WAIT_SECONDS)
+            cached = get_cached(cache_key, local_ttl_seconds=settings.local_cache.default_ttl_seconds)
+            if cached is not None:
+                result = cached
+                break
+        if result is None:
+            if lastId is not None:
+                books = list_books_by_cursor(db, lastId, effective_page_size)
+            else:
+                books = list_books(db, page, effective_page_size)
+                if not books and page != 1:
+                    return JSONResponse({"error": "页面不存在"}, status_code=404)
+
+            next_last_id = books[-1].id if books else None
+            result = {
+                "page": page,
+                "pageSize": effective_page_size,
+                "lastId": lastId,
+                "nextLastId": next_last_id,
+                "books": [book_to_summary(book) for book in books],
+            }
+            set_cached(
+                cache_key,
+                result,
+                redis_ttl_seconds=settings.redis.book_list_ttl_seconds,
+                local_ttl_seconds=settings.local_cache.default_ttl_seconds,
+            )
     record_timing_metric("books_list.cache_path_ms", (time.perf_counter() - cache_start) * 1000.0)
     build_start = time.perf_counter()
     response = JSONResponse(result)
@@ -253,8 +336,8 @@ def get_book_detail(book_id: int, db: Session = Depends(get_db)):
         finally:
             release_lock(lock_key, lock_value)
 
-    for _ in range(DETAIL_REBUILD_MAX_RETRIES):
-        time.sleep(DETAIL_REBUILD_WAIT_SECONDS)
+    for _ in range(CACHE_REBUILD_MAX_RETRIES):
+        time.sleep(CACHE_REBUILD_WAIT_SECONDS)
         cached = get_cached(cache_key, local_ttl_seconds=settings.local_cache.default_ttl_seconds)
         if cached is None:
             continue

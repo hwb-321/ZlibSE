@@ -31,9 +31,11 @@ from ..services.cache_service import (
     async_track_download_hot_access,
     build_file_meta_cache_key,
     delete_cached_public_file_meta,
+    get_local_cached_download_url_payload,
     get_cached_download_url_payload,
     get_unbound_cover_ids_count,
     set_cached_download_url_payload,
+    set_local_cached_download_url_payload,
     serialize_file_meta,
 )
 from ..services.hybrid_cache_service import EMPTY_MARKER, async_get_cached, async_set_cached, async_set_empty, get_cached, set_cached, set_empty
@@ -60,6 +62,8 @@ UPLOAD_REFRESH_THRESHOLD_SECONDS = 300
 UNBOUND_COVER_LIMIT = 5
 FILE_META_REBUILD_WAIT_SECONDS = 0.05
 FILE_META_REBUILD_MAX_RETRIES = 3
+DOWNLOAD_URL_REBUILD_WAIT_SECONDS = 0.02
+DOWNLOAD_URL_REBUILD_MAX_RETRIES = 3
 
 
 class CreateFileRequest(BaseModel):
@@ -613,6 +617,22 @@ async def get_download_url(
         await async_increment_counter("download.hot_window.hot" if download_is_hot else "download.hot_window.cold")
 
     if download_hot_armed:
+        hot_local_lookup_start = time.perf_counter()
+        local_cached_download = get_local_cached_download_url_payload(file_id)
+        hot_local_lookup_elapsed_ms = (time.perf_counter() - hot_local_lookup_start) * 1000.0
+        await async_record_timing_metric("download.hot_url_local_lookup_ms", hot_local_lookup_elapsed_ms)
+        if local_cached_download and local_cached_download.get("filename") == public_payload["original_filename"]:
+            await async_increment_counter("download.hot_url_cache.local_hit")
+            build_start = time.perf_counter()
+            response = {
+                "downloadUrl": local_cached_download["downloadUrl"],
+                "expiresIn": int(local_cached_download.get("expiresIn", settings.storage.download_expires)),
+                "filename": local_cached_download["filename"],
+            }
+            await async_record_timing_metric("download.response_build_ms", (time.perf_counter() - build_start) * 1000.0)
+            await async_record_timing_metric("download.route_ms", (time.perf_counter() - route_start) * 1000.0)
+            return response
+
         hot_lookup_start = time.perf_counter()
         cached_download = await async_get_cached_download_url_payload(file_id)
         hot_lookup_elapsed_ms = (time.perf_counter() - hot_lookup_start) * 1000.0
@@ -621,6 +641,7 @@ async def get_download_url(
         if cached_download:
             if cached_download.get("filename") == public_payload["original_filename"]:
                 await async_increment_counter("download.hot_url_cache.hit")
+                set_local_cached_download_url_payload(file_id, cached_download)
                 build_start = time.perf_counter()
                 response = {
                     "downloadUrl": cached_download["downloadUrl"],
@@ -634,6 +655,61 @@ async def get_download_url(
         else:
             await async_increment_counter("download.hot_url_cache.miss.empty")
         await async_increment_counter("download.hot_url_cache.miss")
+
+        download_lock_key = f"{settings.redis.prefix}:files:download_url:rebuild:{file_id}"
+        download_lock_value = build_lock_value()
+        if await async_acquire_lock(download_lock_key, download_lock_value, ttl_seconds=2):
+            try:
+                second_hot_lookup_start = time.perf_counter()
+                cached_download = await async_get_cached_download_url_payload(file_id)
+                second_hot_lookup_elapsed_ms = (time.perf_counter() - second_hot_lookup_start) * 1000.0
+                await async_record_timing_metric("download.hot_url_lookup_ms", second_hot_lookup_elapsed_ms)
+                await async_record_timing_metric("download.route.hot_cache_lookup_ms", second_hot_lookup_elapsed_ms)
+                if cached_download and cached_download.get("filename") == public_payload["original_filename"]:
+                    await async_increment_counter("download.hot_url_cache.hit")
+                    set_local_cached_download_url_payload(file_id, cached_download)
+                    build_start = time.perf_counter()
+                    response = {
+                        "downloadUrl": cached_download["downloadUrl"],
+                        "expiresIn": int(cached_download.get("expiresIn", settings.storage.download_expires)),
+                        "filename": cached_download["filename"],
+                    }
+                    await async_record_timing_metric(
+                        "download.response_build_ms", (time.perf_counter() - build_start) * 1000.0
+                    )
+                    await async_record_timing_metric("download.route_ms", (time.perf_counter() - route_start) * 1000.0)
+                    return response
+            finally:
+                await async_release_lock(download_lock_key, download_lock_value)
+        else:
+            retry_wait_start = time.perf_counter()
+            for _ in range(DOWNLOAD_URL_REBUILD_MAX_RETRIES):
+                await asyncio.sleep(DOWNLOAD_URL_REBUILD_WAIT_SECONDS)
+                retry_hot_lookup_start = time.perf_counter()
+                cached_download = await async_get_cached_download_url_payload(file_id)
+                retry_hot_lookup_elapsed_ms = (time.perf_counter() - retry_hot_lookup_start) * 1000.0
+                await async_record_timing_metric("download.hot_url_lookup_ms", retry_hot_lookup_elapsed_ms)
+                await async_record_timing_metric("download.route.hot_cache_lookup_ms", retry_hot_lookup_elapsed_ms)
+                if not cached_download:
+                    continue
+                await async_record_timing_metric(
+                    "download.hot_url_retry_wait_ms", (time.perf_counter() - retry_wait_start) * 1000.0
+                )
+                if cached_download.get("filename") == public_payload["original_filename"]:
+                    await async_increment_counter("download.hot_url_cache.hit")
+                    set_local_cached_download_url_payload(file_id, cached_download)
+                    build_start = time.perf_counter()
+                    response = {
+                        "downloadUrl": cached_download["downloadUrl"],
+                        "expiresIn": int(cached_download.get("expiresIn", settings.storage.download_expires)),
+                        "filename": cached_download["filename"],
+                    }
+                    await async_record_timing_metric(
+                        "download.response_build_ms", (time.perf_counter() - build_start) * 1000.0
+                    )
+                    await async_record_timing_metric("download.route_ms", (time.perf_counter() - route_start) * 1000.0)
+                    return response
+            await async_record_timing_metric("download.hot_url_retry_wait_ms", (time.perf_counter() - retry_wait_start) * 1000.0)
 
     presign_start = time.perf_counter()
     download_url = await run_in_threadpool(create_presigned_download_url, stored_file)

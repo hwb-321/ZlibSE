@@ -10,7 +10,7 @@ import yaml
 
 
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent
-DEFAULT_CONFIG_PATH = ROOT_DIR / "config.yaml"
+DEFAULT_CONFIG_PATH = ROOT_DIR / "config.secret.yaml"
 
 
 @dataclass(frozen=True)
@@ -126,11 +126,6 @@ class DebugMetricsConfig:
 
 
 @dataclass(frozen=True)
-class CacheStrategyConfig:
-    mode: str = "versioned"
-
-
-@dataclass(frozen=True)
 class DownloadCacheConfig:
     hot_enabled: bool = True
     hot_signed_url_ttl_seconds: int = 30
@@ -151,7 +146,6 @@ class AppConfig:
     search: SearchConfig
     pagination: PaginationConfig
     debug_metrics: DebugMetricsConfig
-    cache_strategy: CacheStrategyConfig
     download_cache: DownloadCacheConfig
     cors_allow_origins: list[str]
 
@@ -190,7 +184,6 @@ def get_settings() -> AppConfig:
     search_raw = raw.get("search") or {}
     pagination_raw = raw.get("pagination") or {}
     debug_metrics_raw = raw.get("debug_metrics") or {}
-    cache_strategy_raw = raw.get("cache_strategy") or {}
     download_cache_raw = raw.get("download_cache") or {}
     cors_raw = raw.get("cors") or {}
 
@@ -301,9 +294,6 @@ def get_settings() -> AppConfig:
         enabled=bool(debug_metrics_raw.get("enabled", True)),
         slow_sql_threshold_ms=max(1, int(debug_metrics_raw.get("slow_sql_threshold_ms", 100))),
     )
-    cache_strategy = CacheStrategyConfig(
-        mode=str(cache_strategy_raw.get("mode", "versioned")).strip().lower() or "versioned",
-    )
     download_cache = DownloadCacheConfig(
         hot_enabled=bool(download_cache_raw.get("hot_enabled", True)),
         hot_signed_url_ttl_seconds=max(1, int(download_cache_raw.get("hot_signed_url_ttl_seconds", 30))),
@@ -332,7 +322,6 @@ def get_settings() -> AppConfig:
         search=search,
         pagination=pagination,
         debug_metrics=debug_metrics,
-        cache_strategy=cache_strategy,
         download_cache=download_cache,
         cors_allow_origins=cors_allow_origins,
     )

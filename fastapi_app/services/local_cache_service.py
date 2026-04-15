@@ -41,5 +41,12 @@ class LocalTTLCache:
             self._cache.pop(key, None)
             self._expires_at.pop(key, None)
 
+    def delete_prefix(self, prefix: str) -> None:
+        with self._lock:
+            keys = [key for key in self._cache.keys() if key.startswith(prefix)]
+            for key in keys:
+                self._cache.pop(key, None)
+                self._expires_at.pop(key, None)
+
 
 local_cache = LocalTTLCache()
