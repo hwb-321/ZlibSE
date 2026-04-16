@@ -4,6 +4,7 @@ import asyncio
 import time
 from datetime import datetime, timedelta
 from types import SimpleNamespace
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.concurrency import run_in_threadpool
@@ -70,7 +71,7 @@ class CreateFileRequest(BaseModel):
     filename: str
     contentType: str = "application/octet-stream"
     size: int = 0
-    kind: str
+    kind: Literal["book", "cover"]
     fileHash: str | None = None
 
 
