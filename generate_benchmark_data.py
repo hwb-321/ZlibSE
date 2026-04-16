@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import yaml
+from tqdm import tqdm
 
 
 ROOT_DIR = Path(__file__).resolve().parent
@@ -91,6 +93,7 @@ def _build_accounts(accounts_config: dict, books_config: dict) -> list[dict[str,
         raise ValueError("accounts.default_password must not be empty")
 
     users: list[dict[str, object]] = []
+    progress = tqdm(total=user_count, desc="生成压测用户数据", unit="用户", file=sys.stdout)
     for index in range(1, user_count + 1):
         username = f"{username_prefix}_{index:03d}"
         users.append(
@@ -101,6 +104,9 @@ def _build_accounts(accounts_config: dict, books_config: dict) -> list[dict[str,
                 "books": _build_books(username, books_config),
             }
         )
+        progress.set_postfix_str(f"用户 {username}")
+        progress.update(1)
+    progress.close()
     return users
 
 

@@ -2,3 +2,6 @@ __pycache__/
 .venv/
 benchmark_data.yaml
 logs/
+.jwt_cache.yaml
+.runtime_state.yaml
+tmp*.yaml
