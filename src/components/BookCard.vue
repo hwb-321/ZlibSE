@@ -34,15 +34,10 @@ export default {
     data() {
         return {
             loadError: false,
+            coverUrl: '',
         };
     },
     computed: {
-        coverUrl() {
-            if (this.loadError || !this.book.cover_image_path) {
-                return '';
-            }
-            return this.$getCoverUrl(this.book.cover_image_path);
-        },
         formattedFileSize() {
             const fileSizeNum = parseFloat(this.book.file_size);
             if (!Number.isNaN(fileSizeNum)) {
@@ -54,9 +49,30 @@ export default {
             return '';
         },
     },
+    watch: {
+        'book.cover_image_path': {
+            immediate: true,
+            handler() {
+                this.loadCoverUrl();
+            },
+        },
+    },
     methods: {
+        async loadCoverUrl() {
+            if (this.loadError || !this.book.cover_image_path) {
+                this.coverUrl = '';
+                return;
+            }
+            try {
+                this.coverUrl = await this.$getCoverUrl(this.book.cover_image_path);
+            } catch (error) {
+                console.error('加载封面地址失败:', error);
+                this.coverUrl = '';
+            }
+        },
         handleImageError() {
             this.loadError = true;
+            this.coverUrl = '';
         },
     },
 };

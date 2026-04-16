@@ -23,6 +23,18 @@
                 <BookCard :book="book" />
             </v-col>
         </v-row>
+
+        <v-row justify="center" class="mt-4">
+            <v-col cols="12" class="text-center">
+                <v-btn class="mr-2" :disabled="currentPage <= 1" @click="changePage(currentPage - 1)">
+                    上一页
+                </v-btn>
+                <span>第 {{ currentPage }} 页</span>
+                <v-btn class="ml-2" :disabled="!hasNextPage" @click="changePage(currentPage + 1)">
+                    下一页
+                </v-btn>
+            </v-col>
+        </v-row>
     </v-container>
 </template>
   
@@ -44,10 +56,14 @@ export default {
         });
     },
     data() {
+        const paginationConfig = appConfig.pagination?.favorites || {};
         return {
             books: [],
             allBooks: [],
-            searchQuery: ''
+            searchQuery: '',
+            currentPage: paginationConfig.defaultPage || 1,
+            pageSize: paginationConfig.pageSize || 12,
+            hasNextPage: false,
         };
     },
     computed: {
@@ -66,12 +82,25 @@ export default {
         },
         async fetchFavorites() {
             try {
-                const response = await axios.get(`${appConfig.backendUrl}/user/favorites`);
+                const response = await axios.get(`${appConfig.backendUrl}/api/users/me/favorites`, {
+                    params: {
+                        page: this.currentPage,
+                        pageSize: this.pageSize,
+                    },
+                });
                 this.books = response.data.favorites;
                 this.allBooks = response.data.favorites;
+                this.hasNextPage = Array.isArray(response.data.favorites) && response.data.favorites.length === this.pageSize;
             } catch (error) {
                 console.error('Error fetching favorites:', error);
             }
+        },
+        async changePage(page) {
+            if (page < 1 || page === this.currentPage) {
+                return;
+            }
+            this.currentPage = page;
+            await this.fetchFavorites();
         },
         searchFavorites() {
             const query = this.searchQuery.trim().toLowerCase();
@@ -83,9 +112,6 @@ export default {
                 return [
                     book.title,
                     book.author,
-                    book.isbn,
-                    book.category,
-                    book.year,
                     book.language,
                     book.file_type,
                 ].some((value) => String(value || '').toLowerCase().includes(query));

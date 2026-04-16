@@ -41,7 +41,7 @@
 <script>
 import axios from 'axios';
 import appConfig from '@/config/appConfig.json';
-import { buildBackendUrl, downloadByFileId } from '@/utils/fileApi';
+import { downloadByFileId, resolveFileAccessUrl } from '@/utils/fileApi';
 import { hasAccessToken } from '@/utils/auth';
 
 export default {
@@ -91,7 +91,7 @@ export default {
     methods: {
         async fetchBookDetails() {
             try {
-                const response = await axios.get(`${appConfig.backendUrl}/book/get_descriptions/${this.bookId}`);
+                const response = await axios.get(`${appConfig.backendUrl}/api/books/${this.bookId}`);
 
                 const bookData = response.data;
                 this.title = bookData.title;
@@ -105,7 +105,7 @@ export default {
                 this.book_file_id = bookData.book_file_id;
                 this.cover_file_id = bookData.cover_file_id;
                 this.cover_path = bookData.cover_image_path;
-                this.coverImage = buildBackendUrl(bookData.cover_image_path);
+                this.coverImage = await resolveFileAccessUrl(bookData.cover_image_path);
             } catch (error) {
                 console.error('Error fetching book details:', error);
                 return;
@@ -117,7 +117,7 @@ export default {
             }
 
             try {
-                const favoriteResponse = await axios.get(`${appConfig.backendUrl}/user/check_favorite/${this.bookId}`);
+                const favoriteResponse = await axios.get(`${appConfig.backendUrl}/api/users/me/favorites/${this.bookId}`);
                 this.isFavorited = favoriteResponse.data.isFavorited;
             } catch (error) {
                 console.error('Error fetching favorite status:', error);
@@ -140,9 +140,9 @@ export default {
             try {
                 let response;
                 if (this.isFavorited) {
-                    response = await axios.post(`${appConfig.backendUrl}/user/remove_from_favorites/${this.bookId}`, {});
+                    response = await axios.delete(`${appConfig.backendUrl}/api/users/me/favorites/${this.bookId}`);
                 } else {
-                    response = await axios.post(`${appConfig.backendUrl}/user/add_to_favorites/${this.bookId}`, {});
+                    response = await axios.post(`${appConfig.backendUrl}/api/users/me/favorites/${this.bookId}`, {});
                 }
 
                 if (response.data.success) {

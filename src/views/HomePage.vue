@@ -48,19 +48,20 @@ export default {
     });
   },
   data() {
+    const paginationConfig = appConfig.pagination?.home || {};
     return {
       books: [],
       searchQuery: '',
-      currentPage: 1,
+      currentPage: paginationConfig.defaultPage || 1,
       totalPages: 0,
-      pageSize: 12,
+      pageSize: paginationConfig.pageSize || 12,
       showPagination: true,
     };
   },
   methods: {
     async fetchBooksCount() {
       try {
-        const response = await axios.get(`${appConfig.backendUrl}/book/count`);
+        const response = await axios.get(`${appConfig.backendUrl}/api/books/count`);
         const count = response.data.count;
         this.totalPages = Math.ceil(count / this.pageSize); // 计算总页数
       } catch (error) {
@@ -70,7 +71,7 @@ export default {
     async fetchBooks() {
       await this.fetchBooksCount();
       try {
-        const response = await axios.get(`${appConfig.backendUrl}/book/list`, {
+        const response = await axios.get(`${appConfig.backendUrl}/api/books`, {
           params: {
             page: this.currentPage,
             pageSize: this.pageSize,
@@ -85,8 +86,12 @@ export default {
       if (this.searchQuery.trim()) {
         this.showPagination = false;
         try {
-          const response = await axios.get(`${appConfig.backendUrl}/book/search`, {
-            params: { query: this.searchQuery },
+          const response = await axios.get(`${appConfig.backendUrl}/api/books/search`, {
+            params: {
+              query: this.searchQuery,
+              page: 1,
+              pageSize: this.pageSize,
+            },
           });
           this.books = response.data.books;
         } catch (error) {

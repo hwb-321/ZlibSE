@@ -64,7 +64,7 @@ export default {
                 formData.append('current_password', this.passwords.current);
                 formData.append('new_password', this.passwords.new);
                 // 发送请求
-                axios.post(`${appConfig.backendUrl}/user/change_password_user`, formData, {
+                axios.put(`${appConfig.backendUrl}/api/users/me/password`, formData, {
                 })
                     .then(response => {
                         if (response.data.success) {

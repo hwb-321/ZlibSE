@@ -28,13 +28,13 @@
 import axios from 'axios';
 import ePub from 'epubjs';
 import appConfig from '@/config/appConfig.json';
+import { fetchDownloadUrl } from '@/utils/fileApi';
 
 export default {
     data() {
         return {
             book: null,
             rendition: null,
-            bookUrl: '',
             toc: [],
             tocVisible: false,
             readerReady: false,
@@ -63,14 +63,14 @@ export default {
             let fileId = this.$route.query.fileId;
             if (!fileId) {
                 const bookId = this.$route.query.bookId;
-                const response = await axios.get(`${appConfig.backendUrl}/book/get_descriptions/${bookId}`);
+                const response = await axios.get(`${appConfig.backendUrl}/api/books/${bookId}`);
                 fileId = response.data.book_file_id;
             }
 
+            const downloadUrl = await fetchDownloadUrl(fileId);
             const response = await axios.get(
-                `${appConfig.backendUrl}/api/files/${fileId}/content`,
+                downloadUrl,
                 {
-                    params: { download: false },
                     responseType: 'arraybuffer',
                     onDownloadProgress: (event) => {
                         if (event.total) {
@@ -84,11 +84,8 @@ export default {
 
             this.downloadProgress = 100;
             this.loadingStage = '正在初始化阅读器...';
-            const epubBlob = new Blob([response.data], {
-                type: 'application/epub+zip',
-            });
-            this.bookUrl = URL.createObjectURL(epubBlob);
-            this.book = ePub(this.bookUrl);
+            this.book = ePub();
+            await this.book.open(response.data, 'binary');
             this.rendition = this.book.renderTo(this.$refs.book, { width: '100%', height: '100%' });
             await this.rendition.display();
 
@@ -105,9 +102,6 @@ export default {
     beforeUnmount() {
         if (this.book?.destroy) {
             this.book.destroy();
-        }
-        if (this.bookUrl) {
-            URL.revokeObjectURL(this.bookUrl);
         }
     },
     methods: {

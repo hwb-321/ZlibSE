@@ -11,32 +11,66 @@
 
         <v-form @submit.prevent="submitBook">
             <v-alert type="info" variant="tonal" class="mb-4">
-                书名、作者、语言等基础信息将由后端自动解析并回填，上传时无需手动填写。
+                先上传正文并等待后端解析，解析完成后可以修改元数据和封面，再确认创建书籍。
             </v-alert>
 
             <v-file-input
-                label="封面图片（可选）"
-                @update:modelValue="handleCoverChange"
-                accept="image/*"
-                :error-messages="coverErrors"
-            ></v-file-input>
-            <v-file-input
                 label="文件"
                 @update:modelValue="handleFileChange"
+                :disabled="Boolean(parsedDraft)"
                 :error-messages="fileErrors"
             ></v-file-input>
 
-            <v-btn type="submit" color="primary" :loading="submitting"
-                :disabled="!isFormValid || fileErrors.length || coverErrors.length">上传并创建书籍</v-btn>
+            <v-btn v-if="!parsedDraft" type="submit" color="primary" :loading="submitting"
+                :disabled="!isFormValid || fileErrors.length">上传并解析</v-btn>
+            <v-btn
+                v-if="pendingParseFileId && !parsedDraft"
+                color="secondary"
+                variant="outlined"
+                class="ml-2"
+                :loading="checkingPendingParse"
+                @click="resumeParseCheck"
+            >
+                继续检查解析结果
+            </v-btn>
+            <v-btn v-if="parsedDraft" color="secondary" variant="outlined" class="mr-2" @click="resetParsedDraft">
+                重新选择正文
+            </v-btn>
         </v-form>
 
-        <v-card v-if="parsedBookPreview" class="mt-4" variant="outlined">
-            <v-card-title>自动解析结果</v-card-title>
+        <v-card v-if="parsedDraft" class="mt-4" variant="outlined">
+            <v-card-title>确认书籍信息</v-card-title>
             <v-card-text>
-                <div>书名：{{ parsedBookPreview.title || '未解析到，已使用文件名兜底' }}</div>
-                <div>作者：{{ parsedBookPreview.author || '未解析到' }}</div>
-                <div>语言：{{ parsedBookPreview.language || '未解析到' }}</div>
-                <div>状态：{{ parsedBookPreview.statusText }}</div>
+                <div class="mb-3">解析状态：{{ parsedDraft.statusText }}</div>
+                <v-img
+                    v-if="autoCoverPreviewUrl"
+                    :src="autoCoverPreviewUrl"
+                    alt="自动提取封面"
+                    height="320"
+                    contain
+                    class="mb-4"
+                ></v-img>
+                <v-text-field label="书名（可留空）" v-model="parsedDraft.title"></v-text-field>
+                <v-text-field label="作者" v-model="parsedDraft.author"></v-text-field>
+                <v-text-field label="ISBN" v-model="parsedDraft.isbn"></v-text-field>
+                <v-text-field label="分类" v-model="parsedDraft.category"></v-text-field>
+                <v-text-field label="年份" v-model="parsedDraft.year" type="number"></v-text-field>
+                <v-text-field label="语言" v-model="parsedDraft.language"></v-text-field>
+
+                <div class="mb-3">
+                    自动封面：{{ parsedDraft.autoCoverFileId ? `已生成（ID: ${parsedDraft.autoCoverFileId}）` : '未解析到' }}
+                </div>
+
+                <v-file-input
+                    label="手动上传封面（可选）"
+                    @update:modelValue="handleCoverChange"
+                    accept="image/*"
+                    :error-messages="coverErrors"
+                ></v-file-input>
+
+                <v-btn color="primary" :loading="creating" :disabled="!canCreateBook || coverErrors.length" @click="createBook">
+                    确认创建书籍
+                </v-btn>
             </v-card-text>
         </v-card>
 
@@ -53,7 +87,13 @@
 <script>
 import axios from 'axios';
 import appConfig from '@/config/appConfig.json';
-import { uploadBookFileAndWaitForParse, uploadFileToStorage } from '@/utils/fileApi';
+import {
+    fetchDownloadUrl,
+    fetchParseResult,
+    uploadBookFileAndWaitForParse,
+    uploadFileToStorage,
+    waitForParseResult,
+} from '@/utils/fileApi';
 
 export default {
     data() {
@@ -65,7 +105,12 @@ export default {
             errorMessage: '',
             successMessage: '',
             submitting: false,
-            parsedBookPreview: null,
+            creating: false,
+            checkingPendingParse: false,
+            parsedDraft: null,
+            autoCoverPreviewUrl: '',
+            pendingParseFileId: null,
+            pendingParseFileName: '',
         };
     },
     mounted() {
@@ -73,9 +118,15 @@ export default {
             document.title = '上传书籍';
         });
     },
+    beforeUnmount() {
+        this.revokeAutoCoverPreview();
+    },
     computed: {
         isFormValid() {
             return Boolean(this.file_path);
+        },
+        canCreateBook() {
+            return Boolean(this.parsedDraft?.storedFileId);
         },
     },
     methods: {
@@ -96,7 +147,10 @@ export default {
             } else {
                 this.file_path = file;
                 this.fileErrors = [];
-                this.parsedBookPreview = null;
+                this.parsedDraft = null;
+                this.pendingParseFileId = null;
+                this.pendingParseFileName = '';
+                this.revokeAutoCoverPreview();
             }
         },
         handleCoverChange(payload) {
@@ -109,34 +163,61 @@ export default {
                 this.coverErrors = [];
             }
         },
-        buildBookPayload(file, parseResult, bookFileId, coverFileId) {
-            const fallbackTitle = file?.name?.replace(/\.[^.]+$/, '') || '未命名书籍';
+        buildBookPayload(coverFileId) {
+            if (!this.parsedDraft) {
+                return null;
+            }
+            const normalizedYear = this.parsedDraft.year === '' || this.parsedDraft.year === null
+                ? null
+                : Number(this.parsedDraft.year);
             return {
-                title: parseResult?.title || fallbackTitle,
-                author: parseResult?.author || null,
-                isbn: null,
-                category: null,
-                year: null,
-                language: parseResult?.language || null,
-                bookFileId,
+                storedFileId: this.parsedDraft.storedFileId,
+                title: this.parsedDraft.title || null,
+                author: this.parsedDraft.author || null,
+                isbn: this.parsedDraft.isbn || null,
+                category: this.parsedDraft.category || null,
+                year: Number.isNaN(normalizedYear) ? null : normalizedYear,
+                language: this.parsedDraft.language || null,
                 coverFileId,
             };
         },
-        buildPreview(file, parseResult) {
-            const statusMap = {
-                done: '解析完成',
-                failed: '解析失败，已使用文件名兜底',
-                dispatch_failed: '解析任务派发失败，已使用文件名兜底',
-                missing: '暂无解析结果，已使用文件名兜底',
-                timeout: '解析超时，已使用文件名兜底',
-                unknown: '已复用已有文件，未额外轮询解析结果',
-            };
+        buildDraft(file, parseResult, storedFileId) {
             return {
+                storedFileId,
                 title: parseResult?.title || file?.name?.replace(/\.[^.]+$/, '') || '',
                 author: parseResult?.author || '',
+                isbn: '',
+                category: '',
+                year: '',
                 language: parseResult?.language || '',
-                statusText: statusMap[parseResult?.status] || '已使用默认结果',
+                autoCoverFileId: parseResult?.coverFileId || null,
+                statusText: parseResult?.errorMessage ? '解析完成，部分信息需要手动确认' : '解析完成',
             };
+        },
+        resetParsedDraft() {
+            this.revokeAutoCoverPreview();
+            this.parsedDraft = null;
+            this.cover_image_path = null;
+            this.coverErrors = [];
+            this.successMessage = '';
+            this.errorMessage = '';
+            this.pendingParseFileId = null;
+            this.pendingParseFileName = '';
+            this.checkingPendingParse = false;
+        },
+        revokeAutoCoverPreview() {
+            this.autoCoverPreviewUrl = '';
+        },
+        async loadAutoCoverPreview(coverFileId) {
+            this.revokeAutoCoverPreview();
+            if (!coverFileId) {
+                return;
+            }
+            try {
+                this.autoCoverPreviewUrl = await fetchDownloadUrl(coverFileId);
+            } catch (error) {
+                console.error('加载自动封面预览失败:', error);
+            }
         },
         async submitBook() {
             if (!this.isFormValid) {
@@ -147,33 +228,88 @@ export default {
             this.submitting = true;
             this.errorMessage = '';
             this.successMessage = '';
-            this.parsedBookPreview = null;
+            this.parsedDraft = null;
+            this.pendingParseFileId = null;
+            this.pendingParseFileName = '';
 
             try {
                 const uploadResult = await uploadBookFileAndWaitForParse(this.file_path, {
-                    timeoutMs: 15000,
+                    timeoutMs: 180000,
                     intervalMs: 1000,
                 });
-                const bookFileId = uploadResult.fileId;
-                const coverFileId = this.cover_image_path
-                    ? await uploadFileToStorage(this.cover_image_path, 'cover')
-                    : null;
-                const payload = this.buildBookPayload(this.file_path, uploadResult.parseResult, bookFileId, coverFileId);
-
-                await axios.post(
-                    `${appConfig.backendUrl}/api/books`,
-                    payload,
-                );
-
-                this.parsedBookPreview = this.buildPreview(this.file_path, uploadResult.parseResult);
-                this.successMessage = `上传成功，已自动创建《${payload.title}》`;
-                this.file_path = null;
-                this.cover_image_path = null;
+                if (uploadResult.parseResult?.parseStatus !== 'done') {
+                    this.pendingParseFileId = uploadResult.fileId;
+                    this.pendingParseFileName = this.file_path?.name || '';
+                    throw new Error('正文仍在解析中，请稍后继续检查结果。');
+                }
+                this.parsedDraft = this.buildDraft(this.file_path, uploadResult.parseResult, uploadResult.fileId);
+                await this.loadAutoCoverPreview(this.parsedDraft.autoCoverFileId);
             } catch (error) {
                 console.error('Upload error:', error);
                 this.errorMessage = error.response?.data?.message || error.message || '上传失败，请重试。';
             } finally {
                 this.submitting = false;
+            }
+        },
+        async resumeParseCheck() {
+            if (!this.pendingParseFileId) {
+                return;
+            }
+            this.checkingPendingParse = true;
+            this.errorMessage = '';
+            this.successMessage = '';
+            try {
+                let parseResult = await fetchParseResult(this.pendingParseFileId);
+                if (parseResult?.parseStatus !== 'done') {
+                    parseResult = await waitForParseResult(this.pendingParseFileId, {
+                        timeoutMs: 180000,
+                        intervalMs: 1000,
+                    });
+                }
+                if (parseResult?.parseStatus !== 'done') {
+                    throw new Error('正文仍在解析中，请稍后继续检查。');
+                }
+                const draftFile = this.file_path || { name: this.pendingParseFileName };
+                this.parsedDraft = this.buildDraft(draftFile, parseResult, this.pendingParseFileId);
+                this.pendingParseFileId = null;
+                this.pendingParseFileName = '';
+                await this.loadAutoCoverPreview(this.parsedDraft.autoCoverFileId);
+            } catch (error) {
+                console.error('Resume parse error:', error);
+                this.errorMessage = error.response?.data?.message || error.message || '检查解析结果失败，请稍后重试。';
+            } finally {
+                this.checkingPendingParse = false;
+            }
+        },
+        async createBook() {
+            if (!this.canCreateBook) {
+                this.errorMessage = '请先等待解析完成';
+                return;
+            }
+
+            this.creating = true;
+            this.errorMessage = '';
+            this.successMessage = '';
+
+            try {
+                const coverFileId = this.cover_image_path
+                    ? await uploadFileToStorage(this.cover_image_path, 'cover')
+                    : this.parsedDraft.autoCoverFileId;
+                const payload = this.buildBookPayload(coverFileId);
+                const createResponse = await axios.post(`${appConfig.backendUrl}/api/books`, payload);
+
+                this.successMessage = `上传成功，已创建《${createResponse.data.book.title}》`;
+                this.file_path = null;
+                this.cover_image_path = null;
+                this.revokeAutoCoverPreview();
+                this.parsedDraft = null;
+                this.pendingParseFileId = null;
+                this.pendingParseFileName = '';
+            } catch (error) {
+                console.error('Create book error:', error);
+                this.errorMessage = error.response?.data?.message || error.message || '创建书籍失败，请重试。';
+            } finally {
+                this.creating = false;
             }
         },
     },

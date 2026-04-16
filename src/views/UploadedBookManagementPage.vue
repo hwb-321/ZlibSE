@@ -28,6 +28,18 @@
                 <BookCardWithDelete :book="book" @bookDeleted="handleBookDeleted" />
             </v-col>
         </v-row>
+
+        <v-row justify="center" class="mt-4">
+            <v-col cols="12" class="text-center">
+                <v-btn class="mr-2" :disabled="currentPage <= 1" @click="changePage(currentPage - 1)">
+                    上一页
+                </v-btn>
+                <span>第 {{ currentPage }} 页</span>
+                <v-btn class="ml-2" :disabled="!hasNextPage" @click="changePage(currentPage + 1)">
+                    下一页
+                </v-btn>
+            </v-col>
+        </v-row>
     </v-container>
 </template>
   
@@ -43,10 +55,14 @@ export default {
         BookCardWithDelete
     },
     data() {
+        const paginationConfig = appConfig.pagination?.uploads || {};
         return {
             uploadedBooks: [],
             allUploadedBooks: [],
-            searchQuery: ''
+            searchQuery: '',
+            currentPage: paginationConfig.defaultPage || 1,
+            pageSize: paginationConfig.pageSize || 12,
+            hasNextPage: false,
         };
     },
     mounted() {
@@ -60,12 +76,25 @@ export default {
         },
         async fetchUploadedBooks() {
             try {
-                const response = await axios.get(`${appConfig.backendUrl}/user/get_upload_book_list`);
+                const response = await axios.get(`${appConfig.backendUrl}/api/users/me/uploads`, {
+                    params: {
+                        page: this.currentPage,
+                        pageSize: this.pageSize,
+                    },
+                });
                 this.uploadedBooks = response.data.uploadedBooks;
                 this.allUploadedBooks = response.data.uploadedBooks;
+                this.hasNextPage = Array.isArray(response.data.uploadedBooks) && response.data.uploadedBooks.length === this.pageSize;
             } catch (error) {
                 console.error('Error fetching uploaded books:', error);
             }
+        },
+        async changePage(page) {
+            if (page < 1 || page === this.currentPage) {
+                return;
+            }
+            this.currentPage = page;
+            await this.fetchUploadedBooks();
         },
         searchUploadedBooks() {
             const query = this.searchQuery.trim().toLowerCase();
@@ -77,9 +106,6 @@ export default {
                 return [
                     book.title,
                     book.author,
-                    book.isbn,
-                    book.category,
-                    book.year,
                     book.language,
                     book.file_type,
                 ].some((value) => String(value || '').toLowerCase().includes(query));

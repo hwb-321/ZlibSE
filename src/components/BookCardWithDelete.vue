@@ -4,7 +4,6 @@
             <BookCard :book="book" />
         </v-card-text>
         <v-card-actions class="delete-button-container">
-            <v-btn color="primary" variant="outlined" class="edit-btn" @click="editBook(book.id)">编辑</v-btn>
             <v-btn color="error" variant="outlined" class="delete-btn" @click="deleteBook(book.id)">删除</v-btn>
         </v-card-actions>
     </v-card>
@@ -28,16 +27,13 @@ export default {
     methods: {
         async deleteBook(bookId) {
             try {
-                const response = await axios.post(`${appConfig.backendUrl}/user/delete_uploaded_book/${bookId}`, {});
+                const response = await axios.delete(`${appConfig.backendUrl}/api/users/me/uploads/${bookId}`);
                 if (response.data.success) {
                     this.$emit('bookDeleted', bookId);
                 }
             } catch (error) {
                 console.error('删除书籍时发生错误:', error);
             }
-        },
-        editBook(bookId) {
-            this.$router.push({ name: 'ModifyBookInfoPage', params: { bookId: bookId } });
         },
     }
 };

@@ -64,7 +64,7 @@ export default {
     methods: {
         async initCaptcha() {
             try {
-                const response = await axios.get(`${appConfig.backendUrl}/user/generate_captcha`);
+                const response = await axios.get(`${appConfig.backendUrl}/api/auth/captcha`);
                 this.captchaEnabled = response.data.captchaEnabled !== false;
                 if (this.captchaEnabled) {
                     this.captchaKey = response.data.key || '';
@@ -91,7 +91,7 @@ export default {
                 formData.append('username', this.username);
                 formData.append('password', this.password);
 
-                const response = await axios.post(`${appConfig.backendUrl}/user/login_user`, formData, {
+                const response = await axios.post(`${appConfig.backendUrl}/api/auth/login`, formData, {
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded',
                     },
@@ -110,7 +110,7 @@ export default {
         },
         async refreshCaptcha() {
             try {
-                const response = await axios.get(`${appConfig.backendUrl}/user/generate_captcha`);
+                const response = await axios.get(`${appConfig.backendUrl}/api/auth/captcha`);
                 this.captchaEnabled = response.data.captchaEnabled !== false;
                 if (!this.captchaEnabled) {
                     this.captchaKey = '';

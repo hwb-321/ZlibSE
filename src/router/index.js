@@ -11,7 +11,6 @@ import PersonalCenterPage from '@/views/PersonalCenterPage.vue';
 import RegisterPage from '@/views/RegisterPage.vue';
 import PasswordModificationPage from '@/views/PasswordModificationPage.vue';
 import EpubReaderPage from '@/views/OnlineReader/EpubReaderPage.vue';
-import ModifyBookInfoPage from '@/views/ModifyBookInfoPage.vue';
 
 const routes = [
     {
@@ -64,11 +63,6 @@ const routes = [
         path: '/online-reader-epub',
         name: 'EpubReaderPage',
         component: EpubReaderPage
-    },
-    {
-        path: '/modify-book/:bookId',
-        name: 'ModifyBookInfoPage',
-        component: ModifyBookInfoPage
     }
 ];
 
