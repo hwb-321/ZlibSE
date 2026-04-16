@@ -2,5 +2,5 @@ __pycache__/
 .idea/
 media/
 .venv/
-zlibse.db
+*.db
 config.secret.yaml
