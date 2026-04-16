@@ -2,6 +2,12 @@
 
 Vue frontend for the ZlibSE project.
 
+## Project Preview
+
+![Project preview 1](./image_01.png)
+
+![Project preview 2](./image_02.png)
+
 ## Development
 
 ```bash
