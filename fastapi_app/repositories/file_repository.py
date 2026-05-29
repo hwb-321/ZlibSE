@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import StoredFile
 
@@ -48,6 +49,10 @@ def create_file_record(
 
 def get_file(db: Session, file_id: int) -> StoredFile | None:
     return db.get(StoredFile, file_id)
+
+
+async def get_file_async(db: AsyncSession, file_id: int) -> StoredFile | None:
+    return await db.get(StoredFile, file_id)
 
 
 def find_matching_file_by_hash(

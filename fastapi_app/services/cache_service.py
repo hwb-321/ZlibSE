@@ -177,6 +177,17 @@ def get_cached_auth_token_version(user_id: int) -> int | None:
         return None
 
 
+async def async_get_cached_auth_token_version(user_id: int) -> int | None:
+    client = _get_async_client()
+    if client is None:
+        return None
+    try:
+        value = await client.get(_key(*_user_auth_token_version_key(user_id)))
+        return None if value is None else int(value)
+    except Exception:
+        return None
+
+
 def set_cached_auth_token_version(user_id: int, auth_token_version: int) -> None:
     ttl = _with_ttl_jitter(get_settings().redis.auth_token_version_ttl_seconds)
     client = _get_client()
@@ -184,6 +195,17 @@ def set_cached_auth_token_version(user_id: int, auth_token_version: int) -> None
         return
     try:
         client.setex(_key(*_user_auth_token_version_key(user_id)), ttl, str(auth_token_version))
+    except Exception:
+        return
+
+
+async def async_set_cached_auth_token_version(user_id: int, auth_token_version: int) -> None:
+    ttl = _with_ttl_jitter(get_settings().redis.auth_token_version_ttl_seconds)
+    client = _get_async_client()
+    if client is None:
+        return
+    try:
+        await client.setex(_key(*_user_auth_token_version_key(user_id)), ttl, str(auth_token_version))
     except Exception:
         return
 
@@ -214,6 +236,23 @@ def get_cached_user_profile(user_id: int) -> dict | None:
     return parsed if isinstance(parsed, dict) else None
 
 
+async def async_get_cached_user_profile(user_id: int) -> dict | None:
+    client = _get_async_client()
+    if client is None:
+        return None
+    try:
+        value = await client.get(_key(*_user_profile_key(user_id)))
+    except Exception:
+        return None
+    if not value:
+        return None
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError:
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
 def set_local_cached_user_profile_payload(payload: dict) -> None:
     local_cache.set(
         _local_user_profile_key(int(payload["id"])),
@@ -231,6 +270,18 @@ def set_cached_user_profile(user: User) -> None:
     }
     ttl = get_settings().redis.user_profile_ttl_seconds
     set_json(*_user_profile_key(user.id), value=payload, ttl_seconds=ttl)
+    set_local_cached_user_profile_payload(payload)
+
+
+async def async_set_cached_user_profile(user: User) -> None:
+    payload = {
+        "id": user.id,
+        "username": user.username,
+        "email": user.email,
+        "is_superuser": user.is_superuser,
+    }
+    ttl = get_settings().redis.user_profile_ttl_seconds
+    await async_set_json(*_user_profile_key(user.id), value=payload, ttl_seconds=ttl)
     set_local_cached_user_profile_payload(payload)
 
 

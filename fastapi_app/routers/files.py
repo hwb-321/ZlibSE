@@ -9,16 +9,18 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
 from ..core.config import get_settings
-from ..core.database import get_db
-from ..core.deps import get_current_user, get_current_user_optional
+from ..core.database import get_async_db, get_db
+from ..core.deps import get_current_user, get_current_user_optional_async
 from ..models import User
 from ..repositories.file_repository import (
     create_file_record,
     find_matching_file_by_hash,
     get_file,
+    get_file_async,
     get_unbound_book_file_for_user,
 )
 from ..repositories.parse_result_repository import (
@@ -33,19 +35,15 @@ from ..services.cache_service import (
     build_file_meta_cache_key,
     delete_cached_public_file_meta,
     get_local_cached_download_url_payload,
-    get_cached_download_url_payload,
     get_unbound_cover_ids_count,
-    set_cached_download_url_payload,
     set_local_cached_download_url_payload,
     serialize_file_meta,
 )
-from ..services.hybrid_cache_service import EMPTY_MARKER, async_get_cached, async_set_cached, async_set_empty, get_cached, set_cached, set_empty
+from ..services.hybrid_cache_service import EMPTY_MARKER, async_get_cached, async_set_cached, async_set_empty
 from ..services.lock_service import acquire_lock, async_acquire_lock, async_release_lock, build_lock_value, release_lock
 from ..services.metrics_service import (
     async_increment_counter,
     async_record_timing_metric,
-    increment_counter,
-    record_timing_metric,
 )
 from ..services.queue_service import publish_parse_task
 from ..services.parse_service import build_server_mock_parse_result
@@ -79,90 +77,7 @@ class UploadCompleteRequest(BaseModel):
     etag: str | None = None
 
 
-def _load_public_file_meta(db: Session, file_id: int) -> dict:
-    settings = get_settings()
-    cache_key = build_file_meta_cache_key(file_id)
-    cache_lookup_start = time.perf_counter()
-    cached = get_cached(cache_key, local_ttl_seconds=settings.local_cache.file_meta_ttl_seconds)
-    record_timing_metric("download.public_meta.cache_lookup_ms", (time.perf_counter() - cache_lookup_start) * 1000.0)
-    if cached is not None:
-        if cached == EMPTY_MARKER:
-            raise HTTPException(status_code=404, detail="File not found")
-        return cached
-
-    lock_key = f"{settings.redis.prefix}:files:meta:rebuild:{file_id}"
-    lock_value = build_lock_value()
-    lock_acquire_start = time.perf_counter()
-    if acquire_lock(lock_key, lock_value, ttl_seconds=settings.redis.lock_ttl_seconds):
-        record_timing_metric("download.public_meta.lock_wait_ms", (time.perf_counter() - lock_acquire_start) * 1000.0)
-        try:
-            second_cache_lookup_start = time.perf_counter()
-            cached = get_cached(cache_key, local_ttl_seconds=settings.local_cache.file_meta_ttl_seconds)
-            record_timing_metric("download.public_meta.cache_lookup_ms", (time.perf_counter() - second_cache_lookup_start) * 1000.0)
-            if cached is not None:
-                if cached == EMPTY_MARKER:
-                    raise HTTPException(status_code=404, detail="File not found")
-                return cached
-
-            db_lookup_start = time.perf_counter()
-            stored_file = get_file(db, file_id)
-            record_timing_metric("download.public_meta.db_fetch_ms", (time.perf_counter() - db_lookup_start) * 1000.0)
-            if not stored_file or stored_file.ref_count <= 0:
-                set_empty(cache_key, local_ttl_seconds=settings.local_cache.empty_ttl_seconds)
-                raise HTTPException(status_code=404, detail="File not found")
-
-            serialize_start = time.perf_counter()
-            payload = serialize_file_meta(stored_file)
-            record_timing_metric("download.public_meta.serialize_ms", (time.perf_counter() - serialize_start) * 1000.0)
-            cache_store_start = time.perf_counter()
-            set_cached(
-                cache_key,
-                payload,
-                redis_ttl_seconds=settings.redis.file_meta_ttl_seconds,
-                local_ttl_seconds=settings.local_cache.file_meta_ttl_seconds,
-            )
-            record_timing_metric("download.public_meta.cache_fill_ms", (time.perf_counter() - cache_store_start) * 1000.0)
-            return payload
-        finally:
-            release_lock(lock_key, lock_value)
-    record_timing_metric("download.public_meta.lock_wait_ms", (time.perf_counter() - lock_acquire_start) * 1000.0)
-
-    retry_wait_start = time.perf_counter()
-    for _ in range(FILE_META_REBUILD_MAX_RETRIES):
-        time.sleep(FILE_META_REBUILD_WAIT_SECONDS)
-        retry_cache_lookup_start = time.perf_counter()
-        cached = get_cached(cache_key, local_ttl_seconds=settings.local_cache.file_meta_ttl_seconds)
-        record_timing_metric("download.public_meta.cache_lookup_ms", (time.perf_counter() - retry_cache_lookup_start) * 1000.0)
-        if cached is None:
-            continue
-        record_timing_metric("download.public_meta.retry_wait_ms", (time.perf_counter() - retry_wait_start) * 1000.0)
-        if cached == EMPTY_MARKER:
-            raise HTTPException(status_code=404, detail="File not found")
-        return cached
-    record_timing_metric("download.public_meta.retry_wait_ms", (time.perf_counter() - retry_wait_start) * 1000.0)
-
-    final_db_lookup_start = time.perf_counter()
-    stored_file = get_file(db, file_id)
-    record_timing_metric("download.public_meta.db_fetch_ms", (time.perf_counter() - final_db_lookup_start) * 1000.0)
-    if not stored_file or stored_file.ref_count <= 0:
-        set_empty(cache_key, local_ttl_seconds=settings.local_cache.empty_ttl_seconds)
-        raise HTTPException(status_code=404, detail="File not found")
-
-    final_serialize_start = time.perf_counter()
-    payload = serialize_file_meta(stored_file)
-    record_timing_metric("download.public_meta.serialize_ms", (time.perf_counter() - final_serialize_start) * 1000.0)
-    final_cache_store_start = time.perf_counter()
-    set_cached(
-        cache_key,
-        payload,
-        redis_ttl_seconds=settings.redis.file_meta_ttl_seconds,
-        local_ttl_seconds=settings.local_cache.file_meta_ttl_seconds,
-    )
-    record_timing_metric("download.public_meta.cache_fill_ms", (time.perf_counter() - final_cache_store_start) * 1000.0)
-    return payload
-
-
-async def _load_public_file_meta_async(db: Session, file_id: int) -> dict:
+async def _load_public_file_meta_async(db: AsyncSession, file_id: int) -> dict:
     settings = get_settings()
     cache_key = build_file_meta_cache_key(file_id)
     cache_lookup_start = time.perf_counter()
@@ -194,7 +109,7 @@ async def _load_public_file_meta_async(db: Session, file_id: int) -> dict:
                 return cached
 
             db_lookup_start = time.perf_counter()
-            stored_file = get_file(db, file_id)
+            stored_file = await get_file_async(db, file_id)
             await async_record_timing_metric(
                 "download.public_meta.db_fetch_ms", (time.perf_counter() - db_lookup_start) * 1000.0
             )
@@ -239,7 +154,7 @@ async def _load_public_file_meta_async(db: Session, file_id: int) -> dict:
     await async_record_timing_metric("download.public_meta.retry_wait_ms", (time.perf_counter() - retry_wait_start) * 1000.0)
 
     final_db_lookup_start = time.perf_counter()
-    stored_file = get_file(db, file_id)
+    stored_file = await get_file_async(db, file_id)
     await async_record_timing_metric("download.public_meta.db_fetch_ms", (time.perf_counter() - final_db_lookup_start) * 1000.0)
     if not stored_file or stored_file.ref_count <= 0:
         await async_set_empty(cache_key, local_ttl_seconds=settings.local_cache.empty_ttl_seconds)
@@ -306,6 +221,179 @@ def _build_server_mock_object_url() -> str:
         settings.benchmark.mock_file_object_key,
         expires_in=settings.storage.download_expires,
     )
+
+
+def _build_download_response(payload: dict, settings) -> dict:
+    return {
+        "downloadUrl": payload["downloadUrl"],
+        "expiresIn": int(payload.get("expiresIn", settings.storage.download_expires)),
+        "filename": payload["filename"],
+    }
+
+
+async def _resolve_download_file(
+    db: AsyncSession,
+    file_id: int,
+    current_user: User | None,
+) -> tuple[object, dict]:
+    public_payload: dict | None = None
+    stored_file = None
+    public_meta_start = time.perf_counter()
+    try:
+        public_payload = await _load_public_file_meta_async(db, file_id)
+        namespace_build_start = time.perf_counter()
+        stored_file = SimpleNamespace(**public_payload)
+        await async_record_timing_metric(
+            "download.namespace_build_ms",
+            (time.perf_counter() - namespace_build_start) * 1000.0,
+        )
+        await async_increment_counter("download.access_mode.public")
+    except HTTPException as exc:
+        if exc.status_code != 404:
+            raise
+    finally:
+        public_meta_elapsed_ms = (time.perf_counter() - public_meta_start) * 1000.0
+        await async_record_timing_metric("download.public_meta_ms", public_meta_elapsed_ms)
+        await async_record_timing_metric("download.route.resolve_public_ms", public_meta_elapsed_ms)
+
+    if stored_file is not None:
+        assert public_payload is not None
+        return stored_file, public_payload
+
+    owned_lookup_start = time.perf_counter()
+    owned_file = await get_file_async(db, file_id)
+    await async_record_timing_metric(
+        "download.owned_lookup_ms",
+        (time.perf_counter() - owned_lookup_start) * 1000.0,
+    )
+    if not owned_file:
+        raise HTTPException(status_code=404, detail="File not found")
+    if current_user is None:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    access_check_start = time.perf_counter()
+    _ensure_file_owner(owned_file, current_user)
+    if owned_file.bind_status != "unbound":
+        await async_record_timing_metric(
+            "download.access_check_ms",
+            (time.perf_counter() - access_check_start) * 1000.0,
+        )
+        raise HTTPException(status_code=403, detail="File is not available for direct access")
+    await async_record_timing_metric(
+        "download.access_check_ms",
+        (time.perf_counter() - access_check_start) * 1000.0,
+    )
+
+    serialize_start = time.perf_counter()
+    public_payload = serialize_file_meta(owned_file)
+    await async_record_timing_metric(
+        "download.serialize_owned_meta_ms",
+        (time.perf_counter() - serialize_start) * 1000.0,
+    )
+    await async_increment_counter("download.access_mode.owned_unbound")
+    await async_record_timing_metric(
+        "download.route.resolve_owned_ms",
+        (time.perf_counter() - owned_lookup_start) * 1000.0,
+    )
+    return owned_file, public_payload
+
+
+async def _try_get_hot_download_response(
+    file_id: int,
+    filename: str,
+    settings,
+) -> tuple[dict | None, bool]:
+    if not settings.download_cache.hot_enabled:
+        return None, False
+
+    hot_window_count = await async_track_download_hot_access(file_id)
+    download_is_hot = hot_window_count >= settings.download_cache.hot_threshold
+    download_hot_armed = hot_window_count > settings.download_cache.hot_threshold
+    await async_increment_counter("download.hot_window.hot" if download_is_hot else "download.hot_window.cold")
+    if not download_hot_armed:
+        return None, download_is_hot
+
+    hot_local_lookup_start = time.perf_counter()
+    local_cached_download = get_local_cached_download_url_payload(file_id)
+    hot_local_lookup_elapsed_ms = (time.perf_counter() - hot_local_lookup_start) * 1000.0
+    await async_record_timing_metric("download.hot_url_local_lookup_ms", hot_local_lookup_elapsed_ms)
+    if local_cached_download and local_cached_download.get("filename") == filename:
+        await async_increment_counter("download.hot_url_cache.local_hit")
+        build_start = time.perf_counter()
+        response = _build_download_response(local_cached_download, settings)
+        await async_record_timing_metric("download.response_build_ms", (time.perf_counter() - build_start) * 1000.0)
+        return response, download_is_hot
+
+    hot_lookup_start = time.perf_counter()
+    cached_download = await async_get_cached_download_url_payload(file_id)
+    hot_lookup_elapsed_ms = (time.perf_counter() - hot_lookup_start) * 1000.0
+    await async_record_timing_metric("download.hot_url_lookup_ms", hot_lookup_elapsed_ms)
+    await async_record_timing_metric("download.route.hot_cache_lookup_ms", hot_lookup_elapsed_ms)
+    if cached_download:
+        if cached_download.get("filename") == filename:
+            await async_increment_counter("download.hot_url_cache.hit")
+            set_local_cached_download_url_payload(file_id, cached_download)
+            build_start = time.perf_counter()
+            response = _build_download_response(cached_download, settings)
+            await async_record_timing_metric("download.response_build_ms", (time.perf_counter() - build_start) * 1000.0)
+            return response, download_is_hot
+        await async_increment_counter("download.hot_url_cache.miss.filename_mismatch")
+    else:
+        await async_increment_counter("download.hot_url_cache.miss.empty")
+    await async_increment_counter("download.hot_url_cache.miss")
+
+    download_lock_key = f"{settings.redis.prefix}:files:download_url:rebuild:{file_id}"
+    download_lock_value = build_lock_value()
+    if await async_acquire_lock(download_lock_key, download_lock_value, ttl_seconds=2):
+        try:
+            second_hot_lookup_start = time.perf_counter()
+            cached_download = await async_get_cached_download_url_payload(file_id)
+            second_hot_lookup_elapsed_ms = (time.perf_counter() - second_hot_lookup_start) * 1000.0
+            await async_record_timing_metric("download.hot_url_lookup_ms", second_hot_lookup_elapsed_ms)
+            await async_record_timing_metric("download.route.hot_cache_lookup_ms", second_hot_lookup_elapsed_ms)
+            if cached_download and cached_download.get("filename") == filename:
+                await async_increment_counter("download.hot_url_cache.hit")
+                set_local_cached_download_url_payload(file_id, cached_download)
+                build_start = time.perf_counter()
+                response = _build_download_response(cached_download, settings)
+                await async_record_timing_metric(
+                    "download.response_build_ms",
+                    (time.perf_counter() - build_start) * 1000.0,
+                )
+                return response, download_is_hot
+        finally:
+            await async_release_lock(download_lock_key, download_lock_value)
+    else:
+        retry_wait_start = time.perf_counter()
+        for _ in range(DOWNLOAD_URL_REBUILD_MAX_RETRIES):
+            await asyncio.sleep(DOWNLOAD_URL_REBUILD_WAIT_SECONDS)
+            retry_hot_lookup_start = time.perf_counter()
+            cached_download = await async_get_cached_download_url_payload(file_id)
+            retry_hot_lookup_elapsed_ms = (time.perf_counter() - retry_hot_lookup_start) * 1000.0
+            await async_record_timing_metric("download.hot_url_lookup_ms", retry_hot_lookup_elapsed_ms)
+            await async_record_timing_metric("download.route.hot_cache_lookup_ms", retry_hot_lookup_elapsed_ms)
+            if not cached_download:
+                continue
+            await async_record_timing_metric(
+                "download.hot_url_retry_wait_ms",
+                (time.perf_counter() - retry_wait_start) * 1000.0,
+            )
+            if cached_download.get("filename") == filename:
+                await async_increment_counter("download.hot_url_cache.hit")
+                set_local_cached_download_url_payload(file_id, cached_download)
+                build_start = time.perf_counter()
+                response = _build_download_response(cached_download, settings)
+                await async_record_timing_metric(
+                    "download.response_build_ms",
+                    (time.perf_counter() - build_start) * 1000.0,
+                )
+                return response, download_is_hot
+        await async_record_timing_metric(
+            "download.hot_url_retry_wait_ms",
+            (time.perf_counter() - retry_wait_start) * 1000.0,
+        )
+
+    return None, download_is_hot
 
 
 @router.post("/draft")
@@ -548,47 +636,11 @@ def upload_complete(
 @router.get("/{file_id}/download")
 async def get_download_url(
     file_id: int,
-    current_user: User | None = Depends(get_current_user_optional),
-    db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_current_user_optional_async),
+    db: AsyncSession = Depends(get_async_db),
 ):
     route_start = time.perf_counter()
-    public_payload: dict | None = None
-    stored_file = None
-    public_meta_start = time.perf_counter()
-    try:
-        public_payload = await _load_public_file_meta_async(db, file_id)
-        namespace_build_start = time.perf_counter()
-        stored_file = SimpleNamespace(**public_payload)
-        await async_record_timing_metric("download.namespace_build_ms", (time.perf_counter() - namespace_build_start) * 1000.0)
-        await async_increment_counter("download.access_mode.public")
-    except HTTPException as exc:
-        if exc.status_code != 404:
-            raise
-    finally:
-        public_meta_elapsed_ms = (time.perf_counter() - public_meta_start) * 1000.0
-        await async_record_timing_metric("download.public_meta_ms", public_meta_elapsed_ms)
-        await async_record_timing_metric("download.route.resolve_public_ms", public_meta_elapsed_ms)
-
-    if stored_file is None:
-        owned_lookup_start = time.perf_counter()
-        owned_file = await run_in_threadpool(get_file, db, file_id)
-        await async_record_timing_metric("download.owned_lookup_ms", (time.perf_counter() - owned_lookup_start) * 1000.0)
-        if not owned_file:
-            raise HTTPException(status_code=404, detail="File not found")
-        if current_user is None:
-            raise HTTPException(status_code=404, detail="File not found")
-        access_check_start = time.perf_counter()
-        _ensure_file_owner(owned_file, current_user)
-        if owned_file.bind_status != "unbound":
-            await async_record_timing_metric("download.access_check_ms", (time.perf_counter() - access_check_start) * 1000.0)
-            raise HTTPException(status_code=403, detail="File is not available for direct access")
-        await async_record_timing_metric("download.access_check_ms", (time.perf_counter() - access_check_start) * 1000.0)
-        stored_file = owned_file
-        serialize_start = time.perf_counter()
-        public_payload = serialize_file_meta(owned_file)
-        await async_record_timing_metric("download.serialize_owned_meta_ms", (time.perf_counter() - serialize_start) * 1000.0)
-        await async_increment_counter("download.access_mode.owned_unbound")
-        await async_record_timing_metric("download.route.resolve_owned_ms", (time.perf_counter() - owned_lookup_start) * 1000.0)
+    stored_file, public_payload = await _resolve_download_file(db, file_id, current_user)
 
     settings_start = time.perf_counter()
     settings = get_settings()
@@ -598,119 +650,28 @@ async def get_download_url(
     if settings.benchmark.mock_upload_enabled:
         await async_increment_counter("download.mode.mock")
         build_start = time.perf_counter()
-        response = {
-            "downloadUrl": _build_server_mock_object_url(),
-            "expiresIn": settings.storage.download_expires,
-            "filename": public_payload["original_filename"],
-        }
+        response = _build_download_response(
+            {
+                "downloadUrl": _build_server_mock_object_url(),
+                "expiresIn": settings.storage.download_expires,
+                "filename": public_payload["original_filename"],
+            },
+            settings,
+        )
         await async_record_timing_metric("download.route.mode_branch_ms", (time.perf_counter() - mode_branch_start) * 1000.0)
         await async_record_timing_metric("download.response_build_ms", (time.perf_counter() - build_start) * 1000.0)
         await async_record_timing_metric("download.route_ms", (time.perf_counter() - route_start) * 1000.0)
         return response
     await async_record_timing_metric("download.route.mode_branch_ms", (time.perf_counter() - mode_branch_start) * 1000.0)
 
-    download_is_hot = False
-    download_hot_armed = False
-    if settings.download_cache.hot_enabled:
-        hot_window_count = await async_track_download_hot_access(file_id)
-        download_is_hot = hot_window_count >= settings.download_cache.hot_threshold
-        download_hot_armed = hot_window_count > settings.download_cache.hot_threshold
-        await async_increment_counter("download.hot_window.hot" if download_is_hot else "download.hot_window.cold")
-
-    if download_hot_armed:
-        hot_local_lookup_start = time.perf_counter()
-        local_cached_download = get_local_cached_download_url_payload(file_id)
-        hot_local_lookup_elapsed_ms = (time.perf_counter() - hot_local_lookup_start) * 1000.0
-        await async_record_timing_metric("download.hot_url_local_lookup_ms", hot_local_lookup_elapsed_ms)
-        if local_cached_download and local_cached_download.get("filename") == public_payload["original_filename"]:
-            await async_increment_counter("download.hot_url_cache.local_hit")
-            build_start = time.perf_counter()
-            response = {
-                "downloadUrl": local_cached_download["downloadUrl"],
-                "expiresIn": int(local_cached_download.get("expiresIn", settings.storage.download_expires)),
-                "filename": local_cached_download["filename"],
-            }
-            await async_record_timing_metric("download.response_build_ms", (time.perf_counter() - build_start) * 1000.0)
-            await async_record_timing_metric("download.route_ms", (time.perf_counter() - route_start) * 1000.0)
-            return response
-
-        hot_lookup_start = time.perf_counter()
-        cached_download = await async_get_cached_download_url_payload(file_id)
-        hot_lookup_elapsed_ms = (time.perf_counter() - hot_lookup_start) * 1000.0
-        await async_record_timing_metric("download.hot_url_lookup_ms", hot_lookup_elapsed_ms)
-        await async_record_timing_metric("download.route.hot_cache_lookup_ms", hot_lookup_elapsed_ms)
-        if cached_download:
-            if cached_download.get("filename") == public_payload["original_filename"]:
-                await async_increment_counter("download.hot_url_cache.hit")
-                set_local_cached_download_url_payload(file_id, cached_download)
-                build_start = time.perf_counter()
-                response = {
-                    "downloadUrl": cached_download["downloadUrl"],
-                    "expiresIn": int(cached_download.get("expiresIn", settings.storage.download_expires)),
-                    "filename": cached_download["filename"],
-                }
-                await async_record_timing_metric("download.response_build_ms", (time.perf_counter() - build_start) * 1000.0)
-                await async_record_timing_metric("download.route_ms", (time.perf_counter() - route_start) * 1000.0)
-                return response
-            await async_increment_counter("download.hot_url_cache.miss.filename_mismatch")
-        else:
-            await async_increment_counter("download.hot_url_cache.miss.empty")
-        await async_increment_counter("download.hot_url_cache.miss")
-
-        download_lock_key = f"{settings.redis.prefix}:files:download_url:rebuild:{file_id}"
-        download_lock_value = build_lock_value()
-        if await async_acquire_lock(download_lock_key, download_lock_value, ttl_seconds=2):
-            try:
-                second_hot_lookup_start = time.perf_counter()
-                cached_download = await async_get_cached_download_url_payload(file_id)
-                second_hot_lookup_elapsed_ms = (time.perf_counter() - second_hot_lookup_start) * 1000.0
-                await async_record_timing_metric("download.hot_url_lookup_ms", second_hot_lookup_elapsed_ms)
-                await async_record_timing_metric("download.route.hot_cache_lookup_ms", second_hot_lookup_elapsed_ms)
-                if cached_download and cached_download.get("filename") == public_payload["original_filename"]:
-                    await async_increment_counter("download.hot_url_cache.hit")
-                    set_local_cached_download_url_payload(file_id, cached_download)
-                    build_start = time.perf_counter()
-                    response = {
-                        "downloadUrl": cached_download["downloadUrl"],
-                        "expiresIn": int(cached_download.get("expiresIn", settings.storage.download_expires)),
-                        "filename": cached_download["filename"],
-                    }
-                    await async_record_timing_metric(
-                        "download.response_build_ms", (time.perf_counter() - build_start) * 1000.0
-                    )
-                    await async_record_timing_metric("download.route_ms", (time.perf_counter() - route_start) * 1000.0)
-                    return response
-            finally:
-                await async_release_lock(download_lock_key, download_lock_value)
-        else:
-            retry_wait_start = time.perf_counter()
-            for _ in range(DOWNLOAD_URL_REBUILD_MAX_RETRIES):
-                await asyncio.sleep(DOWNLOAD_URL_REBUILD_WAIT_SECONDS)
-                retry_hot_lookup_start = time.perf_counter()
-                cached_download = await async_get_cached_download_url_payload(file_id)
-                retry_hot_lookup_elapsed_ms = (time.perf_counter() - retry_hot_lookup_start) * 1000.0
-                await async_record_timing_metric("download.hot_url_lookup_ms", retry_hot_lookup_elapsed_ms)
-                await async_record_timing_metric("download.route.hot_cache_lookup_ms", retry_hot_lookup_elapsed_ms)
-                if not cached_download:
-                    continue
-                await async_record_timing_metric(
-                    "download.hot_url_retry_wait_ms", (time.perf_counter() - retry_wait_start) * 1000.0
-                )
-                if cached_download.get("filename") == public_payload["original_filename"]:
-                    await async_increment_counter("download.hot_url_cache.hit")
-                    set_local_cached_download_url_payload(file_id, cached_download)
-                    build_start = time.perf_counter()
-                    response = {
-                        "downloadUrl": cached_download["downloadUrl"],
-                        "expiresIn": int(cached_download.get("expiresIn", settings.storage.download_expires)),
-                        "filename": cached_download["filename"],
-                    }
-                    await async_record_timing_metric(
-                        "download.response_build_ms", (time.perf_counter() - build_start) * 1000.0
-                    )
-                    await async_record_timing_metric("download.route_ms", (time.perf_counter() - route_start) * 1000.0)
-                    return response
-            await async_record_timing_metric("download.hot_url_retry_wait_ms", (time.perf_counter() - retry_wait_start) * 1000.0)
+    cached_response, download_is_hot = await _try_get_hot_download_response(
+        file_id,
+        public_payload["original_filename"],
+        settings,
+    )
+    if cached_response is not None:
+        await async_record_timing_metric("download.route_ms", (time.perf_counter() - route_start) * 1000.0)
+        return cached_response
 
     presign_start = time.perf_counter()
     download_url = await run_in_threadpool(create_presigned_download_url, stored_file)
@@ -731,7 +692,7 @@ async def get_download_url(
         await async_record_timing_metric("download.route.hot_cache_store_ms", hot_store_elapsed_ms)
         await async_increment_counter("download.hot_url_cache.store")
     build_start = time.perf_counter()
-    response = dict(response_payload)
+    response = _build_download_response(response_payload, settings)
     response_build_elapsed_ms = (time.perf_counter() - build_start) * 1000.0
     await async_record_timing_metric("download.response_build_ms", response_build_elapsed_ms)
     await async_record_timing_metric("download.route.response_phase_ms", response_build_elapsed_ms)
