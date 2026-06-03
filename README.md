@@ -2,7 +2,7 @@
 
 ZlibSE Backend 是一个基于 FastAPI 的电子书管理后端，围绕用户认证、书籍检索、收藏、文件上传、对象存储下载、异步解析和缓存优化展开。
 
-项目当前默认按完整能力运行：MySQL 作为业务数据事实源，Redis 作为共享缓存和分布式协调组件，进程内 TTLCache 提供一级缓存，腾讯云 COS 保存文件，RabbitMQ 承担异步解析任务。
+项目当前默认按完整能力运行：MySQL 作为业务数据事实源，Redis 作为共享缓存和分布式协调组件，进程内 TTLCache 提供一级缓存，腾讯云 COS 保存文件，Kafka 承担异步解析任务。
 
 ## 核心能力
 
@@ -11,7 +11,7 @@ ZlibSE Backend 是一个基于 FastAPI 的电子书管理后端，围绕用户�
 - 收藏业务：收藏状态、增删收藏、收藏列表。
 - 文件业务：draft、上传会话、上传完成、解析状态、下载地址。
 - 上传记录：上传列表、删除书籍及关联文件。
-- 异步解析：RabbitMQ worker、对象存储读写、解析结果入库、自动封面。
+- 异步解析：Kafka worker、对象存储读写、解析结果入库、自动封面。
 - 缓存体系：TTLCache、Redis、空值缓存、随机 TTL 抖动、Redis 重建锁、布隆过滤器。
 - 调试指标：请求、SQL、缓存、锁等指标写入 Redis，可通过 `/debug/metrics` 查看。
 
@@ -40,7 +40,7 @@ ZlibSE Backend 是一个基于 FastAPI 的电子书管理后端，围绕用户�
 - 数据库：MySQL
 - 缓存与协调：Redis、cachetools TTLCache
 - 对象存储：腾讯云 COS 的 S3 兼容接口，底层使用 boto3
-- 异步任务：RabbitMQ、pika
+- 异步任务：Kafka、kafka-python
 - 鉴权：JWT、PyJWT
 - 文件解析：EbookLib、pypdf、PyMuPDF
 - 防穿透：bloom-filter2
@@ -95,7 +95,7 @@ curl http://127.0.0.1:8000/ping
 - `database`：数据库 URL 或本地 SQLite 路径、连接池参数。
 - `redis`：Redis 地址、缓存 TTL、锁 TTL、布隆过滤器参数。
 - `local_cache`：进程内一级缓存开关、容量、TTL。
-- `async_parse`：RabbitMQ 异步解析开关与队列配置。
+- `async_parse`：Kafka 异步解析开关、topic、消费组与本机 broker 自动启动配置。`broker_auto_start=true` 时，`python -m fastapi_app` 会先检测 `bootstrap_servers` 端口，未就绪则执行 `broker_start_command` 并等待端口可用。
 - `download_cache`：热点下载签名 URL 缓存配置。
 - `storage`：COS bucket、region、endpoint、密钥和对象 key 前缀。
 
@@ -134,7 +134,7 @@ curl http://127.0.0.1:8000/ping
 
 ## 异步解析
 
-真实模式下，正文文件上传完成后会投递 RabbitMQ 解析任务，worker 异步处理：
+真实模式下，正文文件上传完成后会投递 Kafka 解析任务，worker 异步处理：
 
 1. 从 MySQL 读取文件记录。
 2. 从 COS 下载原文件。

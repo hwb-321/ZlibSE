@@ -10,7 +10,7 @@ PyJWT
 redis
 cachetools
 bloom-filter2
-pika
+kafka-python
 PyMySQL
 asyncmy
 cryptography

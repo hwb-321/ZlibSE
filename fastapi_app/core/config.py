@@ -66,11 +66,15 @@ class BenchmarkConfig:
 class AsyncParseConfig:
     enabled: bool = False
     mode: str = "off"
-    broker: str = "rabbitmq"
-    broker_url: str = "amqp://guest:guest@127.0.0.1:5672/%2F"
-    queue_name: str = "zlibse.file.parse"
-    exchange_name: str = "zlibse.file"
-    routing_key: str = "parse"
+    bootstrap_servers: str = "127.0.0.1:9092"
+    topic_name: str = "zlibse.file.parse"
+    consumer_group: str = "zlibse-parse-workers"
+    auto_offset_reset: str = "earliest"
+    broker_auto_start: bool = False
+    broker_start_command: str = "systemctl start kafka"
+    broker_start_requires_sudo: bool = True
+    broker_start_sudo_password: str = ""
+    broker_start_timeout_seconds: int = 30
     task_ttl_seconds: int = 3600
 
 
@@ -168,6 +172,17 @@ def _as_str_list(value: Any, default: list[str]) -> list[str]:
     return value
 
 
+def _parse_async_mode(value: Any) -> str:
+    if isinstance(value, bool):
+        return "on" if value else "off"
+    mode = str(value or "off").lower()
+    if mode in {"true", "yes", "1"}:
+        return "on"
+    if mode in {"false", "no", "0"}:
+        return "off"
+    return mode
+
+
 @lru_cache(maxsize=1)
 def get_settings() -> AppConfig:
     config_path = Path(os.getenv("APP_CONFIG_FILE", DEFAULT_CONFIG_PATH))
@@ -245,12 +260,16 @@ def get_settings() -> AppConfig:
     )
     async_parse = AsyncParseConfig(
         enabled=bool(async_parse_raw.get("enabled", False)),
-        mode=str(async_parse_raw.get("mode", "off")).lower(),
-        broker=str(async_parse_raw.get("broker", "rabbitmq")),
-        broker_url=str(async_parse_raw.get("broker_url", "amqp://guest:guest@127.0.0.1:5672/%2F")),
-        queue_name=str(async_parse_raw.get("queue_name", "zlibse.file.parse")),
-        exchange_name=str(async_parse_raw.get("exchange_name", "zlibse.file")),
-        routing_key=str(async_parse_raw.get("routing_key", "parse")),
+        mode=_parse_async_mode(async_parse_raw.get("mode", "off")),
+        bootstrap_servers=str(async_parse_raw.get("bootstrap_servers", "127.0.0.1:9092")),
+        topic_name=str(async_parse_raw.get("topic_name", "zlibse.file.parse")),
+        consumer_group=str(async_parse_raw.get("consumer_group", "zlibse-parse-workers")),
+        auto_offset_reset=str(async_parse_raw.get("auto_offset_reset", "earliest")),
+        broker_auto_start=bool(async_parse_raw.get("broker_auto_start", False)),
+        broker_start_command=str(async_parse_raw.get("broker_start_command", "systemctl start kafka")),
+        broker_start_requires_sudo=bool(async_parse_raw.get("broker_start_requires_sudo", True)),
+        broker_start_sudo_password=str(async_parse_raw.get("broker_start_sudo_password", "")),
+        broker_start_timeout_seconds=max(1, int(async_parse_raw.get("broker_start_timeout_seconds", 30))),
         task_ttl_seconds=max(1, int(async_parse_raw.get("task_ttl_seconds", 3600))),
     )
     redis = RedisConfig(

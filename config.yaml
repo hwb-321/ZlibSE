@@ -53,17 +53,25 @@ async_parse:
   # 是否启用上传完成后的异步解析。
   enabled: true
   # 运行模式：off=关闭，on=真实解析。server-mock 下会直接跳过真实解析。
-  mode: on
-  # 消息队列类型，当前实现使用 RabbitMQ。
-  broker: rabbitmq
-  # RabbitMQ 连接地址。
-  broker_url: amqp://guest:guest@127.0.0.1:5672/%2F
-  # 解析任务交换机。
-  exchange_name: zlibse.file
-  # 解析任务队列。
-  queue_name: zlibse.file.parse
-  # 解析任务路由键。
-  routing_key: parse
+  mode: "on"
+  # Kafka broker 地址。
+  bootstrap_servers: 4070s-linux.xinghen.ip-ddns.com:9092
+  # 解析任务 topic。
+  topic_name: zlibse.file.parse
+  # 解析 worker 消费组。
+  consumer_group: zlibse-parse-workers
+  # 无已提交 offset 时的消费起点。
+  auto_offset_reset: earliest
+  # 启动后端时是否自动拉起本机 Kafka broker。
+  broker_auto_start: false
+  # 自动拉起 Kafka 的命令。按本机安装方式调整。
+  broker_start_command: systemctl start kafka
+  # 自动拉起命令是否需要 sudo。
+  broker_start_requires_sudo: true
+  # 公开模板不保存 sudo 密码，真实环境请写入 config.secret.yaml。
+  broker_start_sudo_password: ""
+  # 等待 Kafka 端口就绪的超时时间。
+  broker_start_timeout_seconds: 30
   # 解析任务锁与可见窗口 TTL。
   task_ttl_seconds: 3600
 

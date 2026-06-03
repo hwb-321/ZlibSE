@@ -4,68 +4,48 @@ import json
 import threading
 from uuid import uuid4
 
-import pika
+from kafka import KafkaProducer
 
 from ..core.config import get_settings
 
-_connection_lock = threading.Lock()
+
+_producer_lock = threading.Lock()
 _publish_lock = threading.Lock()
-_connection: pika.BlockingConnection | None = None
-_channel = None
-_declared_signature: tuple[str, str, str] | None = None
+_producer: KafkaProducer | None = None
+_producer_signature: tuple[str, str] | None = None
 
 
-def _declare(channel) -> None:
+def _get_producer() -> KafkaProducer:
+    global _producer, _producer_signature
     settings = get_settings().async_parse
-    channel.exchange_declare(exchange=settings.exchange_name, exchange_type="direct", durable=True)
-    channel.queue_declare(queue=settings.queue_name, durable=True)
-    channel.queue_bind(
-        queue=settings.queue_name,
-        exchange=settings.exchange_name,
-        routing_key=settings.routing_key,
-    )
+    signature = (settings.bootstrap_servers, settings.topic_name)
 
-
-def _get_channel():
-    global _connection, _channel, _declared_signature
-    settings = get_settings().async_parse
-    signature = (settings.exchange_name, settings.queue_name, settings.routing_key)
-
-    with _connection_lock:
-        if _connection is None or _connection.is_closed:
-            parameters = pika.URLParameters(settings.broker_url)
-            _connection = pika.BlockingConnection(parameters)
-            _channel = _connection.channel()
-            _declared_signature = None
-
-        assert _channel is not None
-        if _declared_signature != signature or _channel.is_closed:
-            if _channel.is_closed:
-                _channel = _connection.channel()
-            _declare(_channel)
-            _declared_signature = signature
-        return _channel
+    with _producer_lock:
+        if _producer is None or _producer_signature != signature:
+            if _producer is not None:
+                _producer.close(timeout=5)
+            _producer = KafkaProducer(
+                bootstrap_servers=settings.bootstrap_servers,
+                key_serializer=lambda value: str(value).encode("utf-8"),
+                value_serializer=lambda value: json.dumps(value, ensure_ascii=False).encode("utf-8"),
+                acks="all",
+                retries=3,
+            )
+            _producer_signature = signature
+        return _producer
 
 
 def publish_parse_task(*, file_id: int, parser_mode: str) -> str:
     settings = get_settings().async_parse
     task_id = uuid4().hex
-    body = json.dumps(
-        {
-            "task_id": task_id,
-            "file_id": file_id,
-            "parser_mode": parser_mode,
-        },
-    )
+    payload = {
+        "task_id": task_id,
+        "file_id": int(file_id),
+        "parser_mode": parser_mode,
+    }
     with _publish_lock:
-        channel = _get_channel()
-        channel.basic_publish(
-            exchange=settings.exchange_name,
-            routing_key=settings.routing_key,
-            body=body,
-            properties=pika.BasicProperties(
-                delivery_mode=2,
-                content_type="application/json",
-            ),
-        )
+        producer = _get_producer()
+        future = producer.send(settings.topic_name, key=file_id, value=payload)
+        future.get(timeout=10)
+        producer.flush(timeout=5)
     return task_id

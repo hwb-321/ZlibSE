@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-import pika
+from kafka import KafkaConsumer
 
 from ..core.config import get_settings
 from ..core.database import SessionLocal
@@ -20,31 +20,36 @@ from ..services.storage_service import upload_bytes
 
 def run_worker() -> None:
     settings = get_settings().async_parse
-    parameters = pika.URLParameters(settings.broker_url)
-    connection = pika.BlockingConnection(parameters)
-    channel = connection.channel()
-    channel.exchange_declare(exchange=settings.exchange_name, exchange_type="direct", durable=True)
-    channel.queue_declare(queue=settings.queue_name, durable=True)
-    channel.queue_bind(queue=settings.queue_name, exchange=settings.exchange_name, routing_key=settings.routing_key)
-    channel.basic_qos(prefetch_count=1)
-    channel.basic_consume(queue=settings.queue_name, on_message_callback=_handle_message)
-    channel.start_consuming()
+    consumer = KafkaConsumer(
+        settings.topic_name,
+        bootstrap_servers=settings.bootstrap_servers,
+        group_id=settings.consumer_group,
+        enable_auto_commit=False,
+        auto_offset_reset=settings.auto_offset_reset,
+        value_deserializer=lambda value: json.loads(value.decode("utf-8")),
+    )
+    try:
+        for message in consumer:
+            try:
+                _handle_message(message.value)
+            except Exception as exc:
+                print(f"failed to handle parse task: {exc}", flush=True)
+            consumer.commit()
+    finally:
+        consumer.close()
 
 
-def _handle_message(channel, method, _properties, body: bytes) -> None:
-    payload = json.loads(body.decode("utf-8"))
+def _handle_message(payload: dict) -> None:
     file_id = int(payload["file_id"])
     parser_mode = str(payload.get("parser_mode") or get_settings().async_parse.mode)
     lock_key = f"parse:lock:{file_id}"
     lock_value = build_lock_value()
     if not acquire_lock(lock_key, lock_value, ttl_seconds=get_settings().async_parse.task_ttl_seconds):
-        channel.basic_ack(delivery_tag=method.delivery_tag)
         return
 
     db = SessionLocal()
     try:
         process_file_parse(db, file_id=file_id, parser_mode=parser_mode)
-        channel.basic_ack(delivery_tag=method.delivery_tag)
     except Exception as exc:
         stored_file = get_file(db, file_id)
         parse_result = get_file_parse_result(db, file_id)
@@ -56,7 +61,6 @@ def _handle_message(channel, method, _properties, body: bytes) -> None:
             parse_result.error_message = str(exc)
             db.add(parse_result)
         db.commit()
-        channel.basic_ack(delivery_tag=method.delivery_tag)
     finally:
         db.close()
         release_lock(lock_key, lock_value)
