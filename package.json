@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "serve": "vue-cli-service serve --mode development",
+    "serve:poll": "CHOKIDAR_USEPOLLING=true vue-cli-service serve --mode development",
     "build": "vue-cli-service build --mode development",
     "lint": "vue-cli-service lint"
   },

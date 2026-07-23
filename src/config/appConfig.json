@@ -1,5 +1,5 @@
 {
-  "backendUrl": "http://zlibse.xinghen.ip-ddns.com:8000",
+  "backendUrl": "http://zlibse.xingchen6.top:8000",
   "devServer": {
     "host": "0.0.0.0",
     "port": 8080,
