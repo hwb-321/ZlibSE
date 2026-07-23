@@ -1,0 +1,14 @@
+security:
+  captcha_enabled: false
+benchmark:
+  mock_upload_enabled: false
+  parse_execution_mode: kafka
+redis:
+  enabled: true
+  prefix: zlibse_bench_l1_redis_hot_${BENCHMARK_RUN_ID}
+local_cache:
+  enabled: true
+download_cache:
+  hot_enabled: true
+debug_metrics:
+  enabled: true

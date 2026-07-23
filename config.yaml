@@ -19,7 +19,7 @@ security:
   jwt_algorithm: HS256
   # Access token 过期天数。
   jwt_access_token_expire_days: 7
-  # 是否启用登录/注册验证码。
+  # 是否启用登录/注册验证码。benchmark 运行时设为 false。
   captcha_enabled: true
 
 # 数据库配置。
@@ -47,6 +47,9 @@ benchmark:
   mock_language: zh-CN
   # server-mock 下写入 file_parse_results 的默认页数。
   mock_page_count: 0
+  # 解析执行方式：kafka=上传完成后投递 Kafka；sync=仅压测时在 /complete 内同步真实解析。
+  # 生产环境保持 kafka；sync 仅用于与异步链路做受控性能对比。
+  parse_execution_mode: kafka
 
 # 文件后验异步解析配置。
 async_parse:
@@ -77,11 +80,11 @@ async_parse:
 
 # Redis 配置。enabled=false 时会完全回退到数据库/原始逻辑。
 redis:
-  # 是否启用 Redis 缓存。
+  # 是否启用 Redis 缓存。no_cache 压测设为 false；redis_hot、l1_redis_hot 设为 true。
   enabled: true
   # Redis 连接地址。
   url: redis://127.0.0.1:6379/0
-  # Redis key 前缀。
+  # Redis key 前缀。每轮压测修改为唯一值，例如 zlibse_bench_l1_hot_r1。
   prefix: zlibse
   # 默认缓存 TTL，单位秒。
   default_ttl_seconds: 300
@@ -112,7 +115,7 @@ redis:
 
 # 本地缓存配置，用于构建 L1 + Redis 双缓存。
 local_cache:
-  # 是否启用本地一级缓存。
+  # 是否启用本地一级缓存。no_cache、redis_hot 设为 false；l1_redis_hot 设为 true。
   # 只有当 redis.enabled=true 且 local_cache.enabled=true 时，才会形成“一级缓存 + Redis + 数据库”三层模式。
   # 如果 redis.enabled=false，则这里即使为 true 也不会单独启用一级缓存，而是直接退回“只有数据库”。
   enabled: true
@@ -157,7 +160,7 @@ debug_metrics:
 
 # 下载签发缓存配置。
 download_cache:
-  # 是否开启基于滑动窗口热点识别的下载签发 URL Redis 短缓存。
+  # 是否开启基于滑动窗口热点识别的下载签发 URL Redis 短缓存。no_cache 设为 false；其余两档设为 true。
   hot_enabled: true
   # 热点下载签发 URL 的 Redis TTL，单位秒。压测前先预热 file_id 时，可以适当设置长一点。
   hot_signed_url_ttl_seconds: 30

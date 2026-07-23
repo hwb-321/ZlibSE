@@ -60,6 +60,7 @@ class BenchmarkConfig:
     mock_author: str = "Mock Parser"
     mock_language: str = "zh-CN"
     mock_page_count: int = 0
+    parse_execution_mode: str = "kafka"
 
 
 @dataclass(frozen=True)
@@ -183,10 +184,42 @@ def _parse_async_mode(value: Any) -> str:
     return mode
 
 
+def _deep_merge_config(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
+    merged = dict(base)
+    for key, value in overlay.items():
+        existing = merged.get(key)
+        if isinstance(existing, dict) and isinstance(value, dict):
+            merged[key] = _deep_merge_config(existing, value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def _expand_environment_values(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {key: _expand_environment_values(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_expand_environment_values(item) for item in value]
+    if isinstance(value, str):
+        return os.path.expandvars(value)
+    return value
+
+
+def _parse_benchmark_parse_execution_mode(value: Any) -> str:
+    mode = str(value or "kafka").strip().lower()
+    if mode not in {"kafka", "sync"}:
+        raise ValueError("benchmark.parse_execution_mode must be 'kafka' or 'sync'")
+    return mode
+
+
 @lru_cache(maxsize=1)
 def get_settings() -> AppConfig:
     config_path = Path(os.getenv("APP_CONFIG_FILE", DEFAULT_CONFIG_PATH))
     raw = _read_yaml_config(config_path)
+    overlay_path_text = os.getenv("APP_CONFIG_OVERLAY_FILE", "").strip()
+    if overlay_path_text:
+        raw = _deep_merge_config(raw, _read_yaml_config(Path(overlay_path_text)))
+    raw = _expand_environment_values(raw)
 
     server_raw = raw.get("server") or {}
     security_raw = raw.get("security") or {}
@@ -257,6 +290,9 @@ def get_settings() -> AppConfig:
         mock_author=str(benchmark_raw.get("mock_author", "Mock Parser")).strip() or "Mock Parser",
         mock_language=str(benchmark_raw.get("mock_language", "zh-CN")).strip() or "zh-CN",
         mock_page_count=max(0, int(benchmark_raw.get("mock_page_count", 0))),
+        parse_execution_mode=_parse_benchmark_parse_execution_mode(
+            benchmark_raw.get("parse_execution_mode", "kafka")
+        ),
     )
     async_parse = AsyncParseConfig(
         enabled=bool(async_parse_raw.get("enabled", False)),

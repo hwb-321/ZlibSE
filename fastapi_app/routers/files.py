@@ -39,11 +39,14 @@ from ..services.cache_service import (
     set_local_cached_download_url_payload,
     serialize_file_meta,
 )
+from ..services.file_parse_task_service import mark_parse_failure, process_file_parse
 from ..services.hybrid_cache_service import EMPTY_MARKER, async_get_cached, async_set_cached, async_set_empty
 from ..services.lock_service import acquire_lock, async_acquire_lock, async_release_lock, build_lock_value, release_lock
 from ..services.metrics_service import (
     async_increment_counter,
     async_record_timing_metric,
+    increment_counter,
+    record_timing_metric,
 )
 from ..services.queue_service import publish_parse_task
 from ..services.parse_service import build_server_mock_parse_result
@@ -593,7 +596,10 @@ def upload_complete(
         stored_file.upload_url = None
 
         parse_task_id = None
-        if stored_file.kind == "book" and settings.async_parse.enabled and settings.async_parse.mode != "off":
+        can_parse_book = stored_file.kind == "book" and settings.async_parse.mode != "off"
+        parse_synchronously = can_parse_book and settings.benchmark.parse_execution_mode == "sync"
+        enqueue_parse_task = can_parse_book and settings.async_parse.enabled and not parse_synchronously
+        if parse_synchronously or enqueue_parse_task:
             stored_file.parse_status = "pending"
             parse_result = get_or_create_file_parse_result(db, stored_file.id, parser_mode=settings.async_parse.mode)
             parse_result.status = "pending"
@@ -605,12 +611,24 @@ def upload_complete(
         db.add(stored_file)
         db.commit()
 
-        if stored_file.kind == "book" and settings.async_parse.enabled and settings.async_parse.mode != "off":
+        if parse_synchronously:
+            parse_start = time.perf_counter()
+            try:
+                process_file_parse(db, file_id=stored_file.id, parser_mode=settings.async_parse.mode)
+                increment_counter("parse.sync.completed")
+            except Exception as exc:
+                mark_parse_failure(db, file_id=stored_file.id, error=exc)
+                increment_counter("parse.sync.failed")
+            finally:
+                record_timing_metric("upload.complete.sync_parse_ms", (time.perf_counter() - parse_start) * 1000.0)
+        elif enqueue_parse_task:
+            publish_start = time.perf_counter()
             try:
                 parse_task_id = publish_parse_task(
                     file_id=stored_file.id,
                     parser_mode=settings.async_parse.mode,
                 )
+                increment_counter("parse.kafka.published")
             except Exception as exc:
                 db.rollback()
                 stored_file = get_file(db, file_id)
@@ -621,6 +639,9 @@ def upload_complete(
                 db.add(parse_result)
                 db.add(stored_file)
                 db.commit()
+                increment_counter("parse.kafka.publish_failed")
+            finally:
+                record_timing_metric("upload.complete.kafka_publish_ms", (time.perf_counter() - publish_start) * 1000.0)
 
         delete_cached_public_file_meta(stored_file.id)
         db.refresh(stored_file)

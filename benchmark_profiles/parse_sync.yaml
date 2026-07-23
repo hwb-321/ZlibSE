@@ -1,0 +1,13 @@
+security:
+  captcha_enabled: false
+benchmark:
+  mock_upload_enabled: false
+  parse_execution_mode: sync
+async_parse:
+  enabled: false
+  mode: on
+redis:
+  enabled: true
+  prefix: zlibse_bench_parse_sync_${BENCHMARK_RUN_ID}
+debug_metrics:
+  enabled: true

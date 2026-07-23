@@ -1,0 +1,13 @@
+security:
+  captcha_enabled: false
+benchmark:
+  mock_upload_enabled: false
+  parse_execution_mode: kafka
+redis:
+  enabled: false
+local_cache:
+  enabled: false
+download_cache:
+  hot_enabled: false
+debug_metrics:
+  enabled: false

@@ -62,6 +62,15 @@ python3 -m venv .venv
 export APP_CONFIG_FILE=/path/to/config.secret.yaml
 ```
 
+压测可在不修改敏感配置的前提下叠加一个公开 profile。`APP_CONFIG_OVERLAY_FILE` 会对主配置做深度合并；其中的 `${BENCHMARK_RUN_ID}` 会展开为本轮唯一 Redis prefix。
+
+```bash
+export BENCHMARK_RUN_ID=redis_hot_random_r1
+export APP_CONFIG_OVERLAY_FILE=/home/hwb/Workspace/ZlibSE-backend/benchmark_profiles/redis_hot.yaml
+```
+
+可用模板在 `benchmark_profiles/`：下载缓存的 `no_cache.yaml`、`redis_hot.yaml`、`l1_redis_hot.yaml`，以及真实解析对比的 `parse_sync.yaml`、`parse_kafka.yaml`。`parse_sync.yaml` 只用于 benchmark 的同步解析基线；默认仍为 Kafka 异步解析。
+
 初始化数据库结构：
 
 ```bash
@@ -97,6 +106,7 @@ curl http://127.0.0.1:8000/ping
 - `local_cache`：进程内一级缓存开关、容量、TTL。
 - `async_parse`：Kafka 异步解析开关、topic、消费组与本机 broker 自动启动配置。`broker_auto_start=true` 时，`python -m fastapi_app` 会先检测 `bootstrap_servers` 端口，未就绪则执行 `broker_start_command` 并等待端口可用。
 - `download_cache`：热点下载签名 URL 缓存配置。
+- `benchmark.parse_execution_mode`：默认 `kafka`；压测同步基线可显式设为 `sync`，使 `/complete` 在当前请求执行原有真实解析流程。
 - `storage`：COS bucket、region、endpoint、密钥和对象 key 前缀。
 
 注意：仓库中的 `config.yaml` 只作为公开模板；运行服务前需要准备本地真实配置文件 `config.secret.yaml`，并填写数据库、Redis、COS、JWT 等环境配置。
@@ -159,6 +169,8 @@ curl -X DELETE http://127.0.0.1:8000/debug/metrics
 ```
 
 指标覆盖请求耗时、SQL、缓存命中、Redis 锁等，接口细节见 [后端接口说明](./document/后端接口说明.md)。
+
+解析压测还会写入：`parse.sync.*`、`parse.worker.*`、`upload.complete.sync_parse_ms`、`upload.complete.kafka_publish_ms`。Kafka 结果必须以 `parse.worker.completed + parse.worker.failed` 与本轮任务数相等为准。
 
 ## 验证
 
